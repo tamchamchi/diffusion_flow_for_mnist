@@ -46,6 +46,13 @@ def compute_activation_statistics(
     batch_size: int = 256,
 ) -> tuple[np.ndarray, np.ndarray]:
     """(N,1,28,28) images in [-1,1] -> (mu, sigma) of their extractor features."""
+    if images.shape[0] < 2:
+        raise ValueError(
+            f"compute_activation_statistics got {images.shape[0]} image(s); "
+            "estimating a covariance matrix needs at least 2, and a "
+            "meaningful FID needs far more than that (Heusel et al. 2017 "
+            "use tens of thousands) -- pass a larger --num-fid-samples."
+        )
     features = []
     for i in range(0, images.shape[0], batch_size):
         batch = images[i : i + batch_size].to(device)

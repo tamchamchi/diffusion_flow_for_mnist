@@ -41,7 +41,7 @@ def sample(
     trajectory = odeint(ode_func, x1, t_grid, method=solver)
     return trajectory[-1]  # type: ignore
 
-
+@torch.no_grad()
 def sample_adaptive(
     method: Method,
     num_samples: int,
@@ -87,7 +87,9 @@ def generate_and_save(
         )  # type: ignore
     else:
         ckpt_path = Path(ckpt_path)  # type: ignore
-    method.net.load_state_dict(torch.load(ckpt_path, map_location=device))  # type: ignore
+    method.net.load_state_dict(
+        torch.load(ckpt_path, map_location=device, weights_only=True)  # type: ignore
+    )
 
     images = sample(method, num_samples=num_samples, num_steps=num_steps, device=device)
     images = (images.clamp(-1, 1) + 1) / 2  # [-1,1] -> [0,1] for saving

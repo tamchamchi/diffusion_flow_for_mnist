@@ -79,7 +79,9 @@ def run_training(
     if resume:
         latest = find_latest_checkpoint(ckpt_root)
         if latest is not None:
-            method.net.load_state_dict(torch.load(latest, map_location=device))
+            method.net.load_state_dict(
+                torch.load(latest, map_location=device, weights_only=True)
+            )
             start_epoch = _epoch_of(latest) + 1
             print(f"[{method_name}] resuming from {latest.name}, starting at epoch {start_epoch}")
         else:

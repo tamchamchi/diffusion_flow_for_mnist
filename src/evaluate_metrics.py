@@ -24,8 +24,7 @@ from src.metrics.fid import (
 )
 from src.metrics.likelihood import compute_bpd
 from src.sampling import sample_adaptive
-from src.train import CKPT_DIRNAME, METHODS
-from src.train import _epoch_of  # noqa: F401 -- re-exported for report["epoch"]
+from src.train import CKPT_DIRNAME, METHODS, _epoch_of
 from src.train import find_all_checkpoints as _find_all_checkpoints_or_empty
 from src.train import find_latest_checkpoint as _find_latest_checkpoint_or_none
 
@@ -131,7 +130,7 @@ def evaluate_method(
     )
 
     method = METHODS[method_name]().to(device)
-    method.net.load_state_dict(torch.load(resolved_ckpt, map_location=device))
+    method.net.load_state_dict(torch.load(resolved_ckpt, map_location=device, weights_only=True))
 
     extractor, transform = get_inception_feature_extractor(device)
     real_mu, real_sigma = compute_or_load_real_statistics(
@@ -201,8 +200,10 @@ def evaluate_all_epochs(
 
     history = []
     for ckpt in checkpoints:
-        method.net.load_state_dict(torch.load(ckpt, map_location=device))
-        test_loader = get_mnist_loader(batch_size=batch_size, train=False, download=True)
+        method.net.load_state_dict(torch.load(ckpt, map_location=device, weights_only=True))
+        test_loader = get_mnist_loader(
+            batch_size=batch_size, train=False, download=True
+        )
 
         report = run_evaluation(
             method=method,
