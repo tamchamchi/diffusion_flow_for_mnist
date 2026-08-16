@@ -4,4 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 set -a; source .env; set +a
 mkdir -p logs
-python -m src.train --method score "$@" 2>&1 | tee "logs/score.txt"
+{
+  echo "===== $(date -Is) : python -m src.train --method score "$@" ====="
+  python -m src.train --method score "$@"
+} 2>&1 | tee -a "logs/score.txt"

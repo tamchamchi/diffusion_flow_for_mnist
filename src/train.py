@@ -33,6 +33,31 @@ CKPT_DIRNAME: dict[str, str] = {
 }
 
 
+def _epoch_of(ckpt_path: Path) -> int:
+    """model_{N}.pt -> N (this is the only place that name is constructed,
+    in run_training below; src/evaluate_metrics.py imports this rather than
+    re-deriving it)."""
+    return int(Path(ckpt_path).stem.rsplit("_", 1)[-1])
+
+
+def find_all_checkpoints(ckpt_dir: Path) -> list[Path]:
+    """Every model_*.pt checkpoint in ckpt_dir, sorted by epoch number.
+
+    Sorting must be numeric, not lexicographic: "model_10.pt" needs to sort
+    after "model_9.pt". Returns [] if ckpt_dir doesn't exist yet or has no
+    checkpoints -- callers decide whether that's an error (evaluation) or
+    just "start from scratch" (training's --resume).
+    """
+    if not Path(ckpt_dir).exists():
+        return []
+    return sorted(Path(ckpt_dir).glob("model_*.pt"), key=_epoch_of)
+
+
+def find_latest_checkpoint(ckpt_dir: Path) -> Path | None:
+    checkpoints = find_all_checkpoints(ckpt_dir)
+    return checkpoints[-1] if checkpoints else None
+
+
 def run_training(
     method_name: str,
     loader: DataLoader,
@@ -41,6 +66,7 @@ def run_training(
     grad_clip: float | None,
     device: torch.device | str = "cpu",
     show: bool = True,
+    resume: bool = False,
 ) -> None:
     device = torch.device(device)
     method = METHODS[method_name]().to(device)
@@ -49,7 +75,28 @@ def run_training(
     ckpt_root = Path(os.environ["CKPT_ROOT"]) / CKPT_DIRNAME[method_name]
     ckpt_root.mkdir(parents=True, exist_ok=True)
 
-    for epoch in range(epochs):
+    start_epoch = 0
+    if resume:
+        latest = find_latest_checkpoint(ckpt_root)
+        if latest is not None:
+            method.net.load_state_dict(torch.load(latest, map_location=device))
+            start_epoch = _epoch_of(latest) + 1
+            print(f"[{method_name}] resuming from {latest.name}, starting at epoch {start_epoch}")
+        else:
+            print(f"[{method_name}] --resume set but no checkpoint found in {ckpt_root}; starting from epoch 0")
+
+    if start_epoch >= epochs:
+        print(
+            f"[{method_name}] already trained through epoch {start_epoch - 1} "
+            f">= --epochs {epochs}; nothing to do"
+        )
+        return
+
+    # Note: only the network weights are checkpointed (not optimizer state),
+    # so a resumed run restarts Adam's moment estimates from scratch each
+    # time. Checkpoints are saved every epoch, so the gap this reoptimizes
+    # over is at most one epoch.
+    for epoch in range(start_epoch, epochs):
         method.train()
         running = 0.0
         n_seen = 0
@@ -95,6 +142,14 @@ def parse_args() -> argparse.Namespace:
         help="e.g. 'cuda:0', 'cuda:1', 'cuda:2', or 'cpu'. "
         "Default: cuda:0 if a GPU is available, else cpu.",
     )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume from the latest model_*.pt checkpoint in "
+        "$CKPT_ROOT/<method's ckpt dir>, continuing at the next epoch "
+        "instead of starting over at epoch 0 (e.g. after a crash). "
+        "No-op if no checkpoint exists yet.",
+    )
     return parser.parse_args()
 
 
@@ -112,6 +167,7 @@ def main() -> None:
         grad_clip=args.grad_clip,
         device=device,
         show=args.show,
+        resume=args.resume,
     )
 
 

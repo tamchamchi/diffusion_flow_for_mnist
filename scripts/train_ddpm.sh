@@ -3,4 +3,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 set -a; source .env; set +a
-python -m src.train --method ddpm "$@" 2>&1 | tee "logs/ddpm.txt"
+mkdir -p logs
+{
+  echo "===== $(date -Is) : python -m src.train --method ddpm "$@" ====="
+  python -m src.train --method ddpm "$@"
+} 2>&1 | tee -a "logs/ddpm.txt"

@@ -25,28 +25,26 @@ from src.metrics.fid import (
 from src.metrics.likelihood import compute_bpd
 from src.sampling import sample_adaptive
 from src.train import CKPT_DIRNAME, METHODS
-
-
-def _epoch_of(ckpt_path: Path) -> int:
-    """model_{N}.pt -> N (see src/train.py:run_training, which saves one
-    checkpoint per epoch under this name)."""
-    return int(Path(ckpt_path).stem.rsplit("_", 1)[-1])
+from src.train import _epoch_of  # noqa: F401 -- re-exported for report["epoch"]
+from src.train import find_all_checkpoints as _find_all_checkpoints_or_empty
+from src.train import find_latest_checkpoint as _find_latest_checkpoint_or_none
 
 
 def find_all_checkpoints(ckpt_dir: Path) -> list[Path]:
-    """Every model_*.pt checkpoint in ckpt_dir, sorted by epoch number.
-
-    Sorting must be numeric, not lexicographic: "model_10.pt" needs to sort
-    after "model_9.pt", which plain string sorting gets wrong.
-    """
-    candidates = sorted(Path(ckpt_dir).glob("model_*.pt"), key=_epoch_of)
+    """Same discovery/sort as src.train (single source of truth for the
+    model_*.pt naming convention), but evaluation has no checkpoint to fall
+    back to, so an empty result is an error here rather than "start fresh"."""
+    candidates = _find_all_checkpoints_or_empty(ckpt_dir)
     if not candidates:
         raise FileNotFoundError(f"no checkpoint found in {ckpt_dir}")
     return candidates
 
 
 def find_latest_checkpoint(ckpt_dir: Path) -> Path:
-    return find_all_checkpoints(ckpt_dir)[-1]
+    latest = _find_latest_checkpoint_or_none(ckpt_dir)
+    if latest is None:
+        raise FileNotFoundError(f"no checkpoint found in {ckpt_dir}")
+    return latest
 
 
 def run_evaluation(
