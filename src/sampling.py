@@ -9,11 +9,14 @@ from pathlib import Path
 
 import torch
 import torchvision.utils as vutils
+from dotenv import load_dotenv
 from torchdiffeq import odeint
 
 from src.methods.base import Method
 from src.schedules import T_MIN
 from src.train import CKPT_DIRNAME, METHODS
+
+load_dotenv()
 
 
 @torch.no_grad()
@@ -44,12 +47,18 @@ def generate_and_save(
     num_samples: int,
     num_steps: int,
     out_path: Path,
+    ckpt_path: str | None = None,
     device: torch.device | str = "cpu",
 ) -> None:
     device = torch.device(device)
     method = METHODS[method_name]().to(device)
-    ckpt_path = Path(os.environ["CKPT_ROOT"]) / CKPT_DIRNAME[method_name] / "model.pt"
-    method.net.load_state_dict(torch.load(ckpt_path, map_location=device))
+    if ckpt_path is None:
+        ckpt_path = (
+            Path(os.environ["CKPT_ROOT"]) / CKPT_DIRNAME[method_name] / "model.pt"
+        )  # type: ignore
+    else:
+        ckpt_path = Path(ckpt_path)  # type: ignore
+    method.net.load_state_dict(torch.load(ckpt_path, map_location=device))  # type: ignore
 
     images = sample(method, num_samples=num_samples, num_steps=num_steps, device=device)
     images = (images.clamp(-1, 1) + 1) / 2  # [-1,1] -> [0,1] for saving
@@ -58,25 +67,28 @@ def generate_and_save(
     out_path.parent.mkdir(parents=True, exist_ok=True)
     vutils.save_image(images, out_path, nrow=8)
 
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--method", choices=sorted(METHODS), required=True)
     parser.add_argument("--num-samples", type=int, default=64)
     parser.add_argument("--num-steps", type=int, default=50)
     parser.add_argument("--out", type=str, default=None)
+    parser.add_argument("--ckpt", type=str, default=None)
+    parser.add_argument("--device", type=str, default="cpu")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    device = "cuda" if torch.cuda.is_available() else "cpu"
     out_path = Path(args.out or f"samples_{args.method}.png")
     generate_and_save(
         method_name=args.method,
         num_samples=args.num_samples,
         num_steps=args.num_steps,
         out_path=out_path,
-        device=device,
+        ckpt_path=args.ckpt,
+        device=args.device,
     )
     print(f"Saved {args.num_samples} samples to {out_path}")
 

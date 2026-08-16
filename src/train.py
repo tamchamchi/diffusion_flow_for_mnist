@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 
 import torch
+from dotenv import load_dotenv
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -11,6 +12,8 @@ from src.methods.base import Method
 from src.methods.flow_matching import FlowMatchingDiffusion, FlowMatchingOT
 from src.methods.noise_matching import NoiseMatchingDiffusion
 from src.methods.score_matching import ScoreFlow, ScoreMatching
+
+load_dotenv()
 
 METHODS: dict[str, type[Method]] = {
     "fm_ot": FlowMatchingOT,
@@ -63,7 +66,7 @@ def run_training(
             running += loss.item() * x0.shape[0]
             n_seen += x0.shape[0]
         print(f"[{method_name}] epoch {epoch}: loss={running / n_seen:.4f}")
-        torch.save(method.net.state_dict(), ckpt_root / f"model_{epochs}.pt")
+        torch.save(method.net.state_dict(), ckpt_root / f"model_{epoch}.pt")
 
 
 def parse_args() -> argparse.Namespace:
