@@ -1,0 +1,19 @@
+name: flow
+channels:
+  - pytorch
+  - conda-forge
+  - nvidia
+dependencies:
+  - python=3.11
+  - pytorch
+  - torchvision
+  - matplotlib
+  - jupyter
+  - numpy
+  - pip
+  - tqdm
+  - einops
+  - torchdiffeq
+  - pip:
+    - scikit-learn
+    - pytest
