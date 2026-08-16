@@ -158,7 +158,7 @@ def evaluate_method(
 ) -> dict:
     """Evaluate one checkpoint (default: the latest one on disk for
     method_name) and write its report to <ckpt_dir>/metrics.json. For a
-    full per-epoch history use evaluate_all_epochs() instead."""
+    full per-epoch history use evaluate_epochs() instead."""
     device = torch.device(device)
     ckpt_root = Path(os.environ["CKPT_ROOT"])
     ckpt_dir = ckpt_root / CKPT_DIRNAME[method_name]
@@ -206,8 +206,9 @@ def evaluate_method(
     return report
 
 
-def evaluate_all_epochs(
+def evaluate_epochs(
     method_name: str,
+    epochs: list[int] | None = None,
     num_fid_samples: int = 50_000,
     num_nll_samples: int = 10_000,
     rtol: float = 1e-5,
@@ -216,19 +217,37 @@ def evaluate_all_epochs(
     batch_size: int = 500,
     device: torch.device | str = "cpu",
 ) -> list[dict]:
-    """Evaluate every model_*.pt checkpoint saved for method_name (one per
+    """Evaluate model_*.pt checkpoints saved for method_name (one per
     training epoch — src/train.py:run_training saves a new one every
-    epoch), so NLL/FID/NFE can be tracked against epoch. Writes one
-    metrics_epoch{N}.json per checkpoint plus a combined
-    metrics_history.json (list of reports, ordered by epoch); the last
-    entry is also written to metrics.json, same file evaluate_method()
+    epoch), so NLL/FID/NFE can be tracked against epoch.
+
+    epochs: which epoch checkpoints to evaluate, e.g. [50, 80, 100]. None
+    (the default) evaluates every checkpoint found on disk. Raises
+    FileNotFoundError if an explicitly requested epoch has no checkpoint.
+
+    Writes one metrics_epoch{N}.json per evaluated checkpoint plus a
+    combined metrics_history.json (list of reports, ordered by epoch); the
+    last entry is also written to metrics.json, same file evaluate_method()
     writes, so src/compare_methods.py keeps reading the latest epoch."""
     device = torch.device(device)
     ckpt_root = Path(os.environ["CKPT_ROOT"])
     ckpt_dir = ckpt_root / CKPT_DIRNAME[method_name]
-    checkpoints = find_all_checkpoints(ckpt_dir)
+    all_checkpoints = find_all_checkpoints(ckpt_dir)
+
+    if epochs is None:
+        checkpoints = all_checkpoints
+    else:
+        by_epoch = {_epoch_of(c): c for c in all_checkpoints}
+        missing = sorted(e for e in epochs if e not in by_epoch)
+        if missing:
+            raise FileNotFoundError(
+                f"no checkpoint found for epoch(s) {missing} in {ckpt_dir}; "
+                f"available epochs: {sorted(by_epoch)}"
+            )
+        checkpoints = [by_epoch[e] for e in sorted(set(epochs))]
+
     logger.info(
-        "[%s] Found %d checkpoints to evaluate: epochs %s",
+        "[%s] Evaluating %d checkpoint(s): epochs %s",
         method_name, len(checkpoints), [_epoch_of(c) for c in checkpoints],
     )
 
@@ -306,10 +325,15 @@ def parse_args() -> argparse.Namespace:
         help="Evaluate one specific checkpoint file instead of the latest.",
     )
     parser.add_argument(
-        "--all-epochs",
-        action="store_true",
-        help="Evaluate every saved epoch checkpoint (not just the latest), "
-        "writing metrics_epoch{N}.json + metrics_history.json. "
+        "--epochs",
+        type=int,
+        nargs="*",
+        default=None,
+        metavar="EPOCH",
+        help="Evaluate specific epoch checkpoints, e.g. --epochs 50 80 100 "
+        "-- writes metrics_epoch{N}.json + metrics_history.json. Pass "
+        "--epochs with no values to evaluate every checkpoint found. Omit "
+        "entirely to evaluate only the latest checkpoint (default). "
         "Mutually exclusive with --ckpt.",
     )
     parser.add_argument(
@@ -335,11 +359,13 @@ def main() -> None:
     device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
     logger.info("Starting evaluation: method=%s device=%s", args.method, device)
 
-    if args.all_epochs:
+    if args.epochs is not None:
         if args.ckpt is not None:
-            raise SystemExit("--all-epochs and --ckpt are mutually exclusive")
-        history = evaluate_all_epochs(
+            raise SystemExit("--epochs and --ckpt are mutually exclusive")
+        epochs = args.epochs or None  # `--epochs` with no values -> evaluate all
+        history = evaluate_epochs(
             method_name=args.method,
+            epochs=epochs,
             num_fid_samples=args.num_fid_samples,
             num_nll_samples=args.num_nll_samples,
             rtol=args.rtol,
