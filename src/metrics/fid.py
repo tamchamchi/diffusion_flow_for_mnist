@@ -5,6 +5,7 @@ images. MNIST is 28x28 grayscale, so every image is resized to Inception's
 expected 299x299 and channel-replicated to 3 channels before extraction.
 """
 
+import logging
 from collections.abc import Callable
 from pathlib import Path
 
@@ -14,6 +15,8 @@ import torch
 from torch import nn
 from torchvision.models import Inception_V3_Weights, inception_v3
 
+logger = logging.getLogger(__name__)
+
 
 def get_inception_feature_extractor(
     device: torch.device | str = "cpu",
@@ -21,6 +24,7 @@ def get_inception_feature_extractor(
     """Returns (model, transform) where model(transform(images)) yields
     (N, 2048) pooled features. Requires internet access the first time (to
     download ImageNet-pretrained Inception-v3 weights)."""
+    logger.info("Loading ImageNet-pretrained Inception-v3 weights (downloads on first use)")
     weights = Inception_V3_Weights.DEFAULT
     model = inception_v3(weights=weights, aux_logits=True)
     model.fc = nn.Identity()  # type: ignore # expose the 2048-dim pooled features directly
@@ -53,14 +57,17 @@ def compute_activation_statistics(
             "meaningful FID needs far more than that (Heusel et al. 2017 "
             "use tens of thousands) -- pass a larger --num-fid-samples."
         )
+    logger.info("Extracting Inception features for %d images (batch_size=%d)", images.shape[0], batch_size)
     features = []
     for i in range(0, images.shape[0], batch_size):
         batch = images[i : i + batch_size].to(device)
         feats = extractor(transform(batch))
         features.append(feats.cpu().numpy())
+        logger.debug("Feature extraction progress: %d/%d", min(i + batch_size, images.shape[0]), images.shape[0])
     features_np = np.concatenate(features, axis=0)
     mu = features_np.mean(axis=0)
     sigma = np.cov(features_np, rowvar=False)
+    logger.info("Feature extraction done: %d images -> %d-dim statistics", images.shape[0], mu.shape[0])
     return mu, sigma
 
 
@@ -96,9 +103,14 @@ def compute_or_load_real_statistics(
     compared, so this caches them to disk and computes them only once."""
     cache_path = Path(cache_path)
     if cache_path.exists():
+        logger.info("Loading cached real-image activation statistics from %s", cache_path)
         data = np.load(cache_path)
         return data["mu"], data["sigma"]
 
+    logger.info(
+        "No cached real-image statistics at %s; collecting up to %d real images",
+        cache_path, num_samples,
+    )
     collected = []
     n_seen = 0
     for x0, _ in loader:
@@ -106,9 +118,11 @@ def compute_or_load_real_statistics(
             break
         collected.append(x0)
         n_seen += x0.shape[0]
+        logger.debug("Real-image collection progress: %d/%d", n_seen, num_samples)
     images = torch.cat(collected, dim=0)[:num_samples]
 
     mu, sigma = compute_activation_statistics(images, extractor, transform, device)
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez(cache_path, mu=mu, sigma=sigma)
+    logger.info("Cached real-image activation statistics to %s", cache_path)
     return mu, sigma

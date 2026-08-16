@@ -7,7 +7,9 @@ with an adaptive-tolerance Probability-Flow-ODE solver.
 
 import argparse
 import json
+import logging
 import os
+import sys
 from collections.abc import Callable
 from pathlib import Path
 
@@ -27,6 +29,20 @@ from src.sampling import sample_adaptive
 from src.train import CKPT_DIRNAME, METHODS, _epoch_of
 from src.train import find_all_checkpoints as _find_all_checkpoints_or_empty
 from src.train import find_latest_checkpoint as _find_latest_checkpoint_or_none
+
+logger = logging.getLogger(__name__)
+
+
+def configure_logging(level: str = "INFO") -> None:
+    """Called once, from main() -- library functions below only ever log
+    through the module-level `logger`, never configure handlers themselves,
+    so importing this module (e.g. from tests) never has side effects."""
+    logging.basicConfig(
+        level=getattr(logging, level.upper()),
+        format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        stream=sys.stdout,
+    )
 
 
 def find_all_checkpoints(ckpt_dir: Path) -> list[Path]:
@@ -68,17 +84,32 @@ def run_evaluation(
     method.eval()
 
     # --- NLL (bits/dim) on held-out real data ---
+    logger.info(
+        "[%s] NLL: evaluating up to %d held-out test samples (solver=%s, rtol=%.1e, atol=%.1e)",
+        method.name, num_nll_samples, solver, rtol, atol,
+    )
     bpd_values = []
     n_seen = 0
     for x0, _ in test_loader:
         if n_seen >= num_nll_samples:
             break
         x0 = x0.to(device)
-        bpd_values.append(compute_bpd(method, x0, solver=solver, rtol=rtol, atol=atol))
+        batch_bpd = compute_bpd(method, x0, solver=solver, rtol=rtol, atol=atol)
+        bpd_values.append(batch_bpd)
         n_seen += x0.shape[0]
+        running_mean = torch.cat(bpd_values).mean().item()
+        logger.info(
+            "[%s] NLL progress: %d/%d samples, running mean BPD=%.4f",
+            method.name, n_seen, num_nll_samples, running_mean,
+        )
     nll_bpd = torch.cat(bpd_values)[:num_nll_samples].mean().item()
+    logger.info("[%s] NLL done: %d samples, BPD=%.4f", method.name, min(n_seen, num_nll_samples), nll_bpd)
 
     # --- FID + NFE over num_fid_samples generated images ---
+    logger.info(
+        "[%s] FID/NFE: generating %d samples (solver=%s, rtol=%.1e, atol=%.1e)",
+        method.name, num_fid_samples, solver, rtol, atol,
+    )
     generated = []
     nfe_values = []
     n_generated = 0
@@ -90,13 +121,19 @@ def run_evaluation(
         generated.append(images.cpu())
         nfe_values.append(nfe)
         n_generated += n
+        logger.info(
+            "[%s] FID sampling progress: %d/%d generated (this batch NFE=%d, avg NFE so far=%.1f)",
+            method.name, n_generated, num_fid_samples, nfe, sum(nfe_values) / len(nfe_values),
+        )
     generated_images = torch.cat(generated, dim=0)
 
+    logger.info("[%s] Extracting Inception features for %d generated images", method.name, n_generated)
     gen_mu, gen_sigma = compute_activation_statistics(
         generated_images, extractor, transform, device
     )
     fid = fid_from_statistics(real_mu, real_sigma, gen_mu, gen_sigma)
     avg_nfe = sum(nfe_values) / len(nfe_values)
+    logger.info("[%s] FID done: %.4f (avg NFE=%.1f over %d batches)", method.name, fid, avg_nfe, len(nfe_values))
 
     return {
         "method": method.name,
@@ -128,10 +165,12 @@ def evaluate_method(
     resolved_ckpt = (
         Path(ckpt_path) if ckpt_path is not None else find_latest_checkpoint(ckpt_dir)
     )
+    logger.info("[%s] Loading checkpoint %s", method_name, resolved_ckpt)
 
     method = METHODS[method_name]().to(device)
     method.net.load_state_dict(torch.load(resolved_ckpt, map_location=device, weights_only=True))
 
+    logger.info("[%s] Loading Inception-v3 feature extractor", method_name)
     extractor, transform = get_inception_feature_extractor(device)
     real_mu, real_sigma = compute_or_load_real_statistics(
         get_mnist_loader(batch_size=batch_size, train=True, download=True),
@@ -161,7 +200,9 @@ def evaluate_method(
     report["checkpoint"] = str(resolved_ckpt)
     report["epoch"] = _epoch_of(resolved_ckpt)
 
-    (ckpt_dir / "metrics.json").write_text(json.dumps(report, indent=2))
+    report_path = ckpt_dir / "metrics.json"
+    report_path.write_text(json.dumps(report, indent=2))
+    logger.info("[%s] Wrote report to %s", method_name, report_path)
     return report
 
 
@@ -186,8 +227,13 @@ def evaluate_all_epochs(
     ckpt_root = Path(os.environ["CKPT_ROOT"])
     ckpt_dir = ckpt_root / CKPT_DIRNAME[method_name]
     checkpoints = find_all_checkpoints(ckpt_dir)
+    logger.info(
+        "[%s] Found %d checkpoints to evaluate: epochs %s",
+        method_name, len(checkpoints), [_epoch_of(c) for c in checkpoints],
+    )
 
     method = METHODS[method_name]().to(device)
+    logger.info("[%s] Loading Inception-v3 feature extractor", method_name)
     extractor, transform = get_inception_feature_extractor(device)
     real_mu, real_sigma = compute_or_load_real_statistics(
         get_mnist_loader(batch_size=batch_size, train=True, download=True),
@@ -199,7 +245,12 @@ def evaluate_all_epochs(
     )
 
     history = []
-    for ckpt in checkpoints:
+    for i, ckpt in enumerate(checkpoints, start=1):
+        epoch = _epoch_of(ckpt)
+        logger.info(
+            "[%s] === Checkpoint %d/%d: %s (epoch %d) ===",
+            method_name, i, len(checkpoints), ckpt.name, epoch,
+        )
         method.net.load_state_dict(torch.load(ckpt, map_location=device, weights_only=True))
         test_loader = get_mnist_loader(
             batch_size=batch_size, train=False, download=True
@@ -221,14 +272,21 @@ def evaluate_all_epochs(
             batch_size=batch_size,
         )
         report["checkpoint"] = str(ckpt)
-        report["epoch"] = _epoch_of(ckpt)
-        (ckpt_dir / f"metrics_epoch{report['epoch']}.json").write_text(
-            json.dumps(report, indent=2)
-        )
+        report["epoch"] = epoch
+        (ckpt_dir / f"metrics_epoch{epoch}.json").write_text(json.dumps(report, indent=2))
         history.append(report)
+        logger.info(
+            "[%s] Checkpoint %d/%d (epoch %d) done: NLL=%.4f FID=%.4f avg_NFE=%.1f",
+            method_name, i, len(checkpoints), epoch,
+            report["nll_bpd"], report["fid"], report["avg_nfe"],
+        )
 
     (ckpt_dir / "metrics_history.json").write_text(json.dumps(history, indent=2))
     (ckpt_dir / "metrics.json").write_text(json.dumps(history[-1], indent=2))
+    logger.info(
+        "[%s] Done: wrote metrics_history.json with %d entries to %s",
+        method_name, len(history), ckpt_dir,
+    )
     return history
 
 
@@ -261,12 +319,21 @@ def parse_args() -> argparse.Namespace:
         help="e.g. 'cuda:0', 'cuda:1', 'cuda:2', or 'cpu'. "
         "Default: cuda:0 if a GPU is available, else cpu.",
     )
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        help="Logging verbosity for progress tracking (default: INFO).",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    configure_logging(args.log_level)
     device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
+    logger.info("Starting evaluation: method=%s device=%s", args.method, device)
 
     if args.all_epochs:
         if args.ckpt is not None:
