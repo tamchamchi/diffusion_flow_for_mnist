@@ -1,0 +1,107 @@
+"""Frechet Inception Distance (FID; Heusel et al. 2017) for MNIST samples.
+
+FID compares 2048-dim Inception-v3 pool features of real vs. generated
+images. MNIST is 28x28 grayscale, so every image is resized to Inception's
+expected 299x299 and channel-replicated to 3 channels before extraction.
+"""
+
+from collections.abc import Callable
+from pathlib import Path
+
+import numpy as np
+import scipy.linalg
+import torch
+from torch import nn
+from torchvision.models import Inception_V3_Weights, inception_v3
+
+
+def get_inception_feature_extractor(
+    device: torch.device | str = "cpu",
+) -> tuple[nn.Module, Callable[[torch.Tensor], torch.Tensor]]:
+    """Returns (model, transform) where model(transform(images)) yields
+    (N, 2048) pooled features. Requires internet access the first time (to
+    download ImageNet-pretrained Inception-v3 weights)."""
+    weights = Inception_V3_Weights.DEFAULT
+    model = inception_v3(weights=weights, aux_logits=True)
+    model.fc = nn.Identity()  # type: ignore # expose the 2048-dim pooled features directly
+    model.eval()
+    model.to(device)
+    preprocess = weights.transforms()
+
+    def transform(images: torch.Tensor) -> torch.Tensor:
+        # images: (N, 1, 28, 28) in [-1, 1] -> (N, 3, 299, 299) Inception input
+        images = (images.clamp(-1, 1) + 1) / 2  # [-1,1] -> [0,1]
+        images = images.repeat(1, 3, 1, 1)
+        return preprocess(images)
+
+    return model, transform
+
+
+@torch.no_grad()
+def compute_activation_statistics(
+    images: torch.Tensor,
+    extractor: nn.Module,
+    transform: Callable[[torch.Tensor], torch.Tensor],
+    device: torch.device | str = "cpu",
+    batch_size: int = 256,
+) -> tuple[np.ndarray, np.ndarray]:
+    """(N,1,28,28) images in [-1,1] -> (mu, sigma) of their extractor features."""
+    features = []
+    for i in range(0, images.shape[0], batch_size):
+        batch = images[i : i + batch_size].to(device)
+        feats = extractor(transform(batch))
+        features.append(feats.cpu().numpy())
+    features_np = np.concatenate(features, axis=0)
+    mu = features_np.mean(axis=0)
+    sigma = np.cov(features_np, rowvar=False)
+    return mu, sigma
+
+
+def fid_from_statistics(
+    mu1: np.ndarray,
+    sigma1: np.ndarray,
+    mu2: np.ndarray,
+    sigma2: np.ndarray,
+    eps: float = 1e-6,
+) -> float:
+    """Frechet distance between N(mu1,sigma1) and N(mu2,sigma2)."""
+    diff = mu1 - mu2
+    covmean, _ = scipy.linalg.sqrtm(sigma1 @ sigma2, disp=False)
+    if not np.isfinite(covmean).all():
+        offset = np.eye(sigma1.shape[0]) * eps
+        covmean, _ = scipy.linalg.sqrtm(
+            (sigma1 + offset) @ (sigma2 + offset), disp=False
+        )
+    if np.iscomplexobj(covmean):
+        covmean = covmean.real
+    return float(diff @ diff + np.trace(sigma1 + sigma2 - 2 * covmean))
+
+
+def compute_or_load_real_statistics(
+    loader,
+    cache_path: Path,
+    extractor: nn.Module,
+    transform: Callable[[torch.Tensor], torch.Tensor],
+    device: torch.device | str = "cpu",
+    num_samples: int = 50_000,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Real-image activation statistics are identical for every method being
+    compared, so this caches them to disk and computes them only once."""
+    cache_path = Path(cache_path)
+    if cache_path.exists():
+        data = np.load(cache_path)
+        return data["mu"], data["sigma"]
+
+    collected = []
+    n_seen = 0
+    for x0, _ in loader:
+        if n_seen >= num_samples:
+            break
+        collected.append(x0)
+        n_seen += x0.shape[0]
+    images = torch.cat(collected, dim=0)[:num_samples]
+
+    mu, sigma = compute_activation_statistics(images, extractor, transform, device)
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez(cache_path, mu=mu, sigma=sigma)
+    return mu, sigma

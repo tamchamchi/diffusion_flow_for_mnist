@@ -42,6 +42,35 @@ def sample(
     return trajectory[-1]  # type: ignore
 
 
+def sample_adaptive(
+    method: Method,
+    num_samples: int,
+    shape: tuple[int, int, int] = (1, 28, 28),
+    solver: str = "dopri5",
+    rtol: float = 1e-5,
+    atol: float = 1e-5,
+    device: torch.device | str = "cpu",
+) -> tuple[torch.Tensor, int]:
+    """Integrate dx/dt = method.velocity(x, t) from t=1 (noise) to t=T_MIN
+    (data) with an adaptive-step solver run to (rtol, atol), returning both
+    the generated batch and the number of function evaluations (NFE) the
+    solver needed to reach that tolerance."""
+    method.eval()
+    x1 = torch.randn(num_samples, *shape, device=device)
+    t_grid = torch.tensor([1.0, T_MIN], device=device)
+
+    nfe = 0
+
+    def ode_func(t: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+        nonlocal nfe
+        nfe += 1
+        t_batch = t.expand(x.shape[0])
+        return method.velocity(x, t_batch)
+
+    trajectory = odeint(ode_func, x1, t_grid, method=solver, rtol=rtol, atol=atol)
+    return trajectory[-1], nfe  # type: ignore
+
+
 def generate_and_save(
     method_name: str,
     num_samples: int,
