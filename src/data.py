@@ -1,5 +1,6 @@
 """MNIST data pipeline shared by every training script."""
 
+import torch
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
@@ -26,4 +27,5 @@ def get_mnist_loader(
         shuffle=train,
         num_workers=num_workers,
         drop_last=train,
+        pin_memory=torch.cuda.is_available(),
     )

@@ -37,6 +37,7 @@ def run_training(
     lr: float,
     grad_clip: float | None,
     device: torch.device | str = "cpu",
+    show: bool = True,
 ) -> None:
     device = torch.device(device)
     method = METHODS[method_name]().to(device)
@@ -49,7 +50,9 @@ def run_training(
         method.train()
         running = 0.0
         n_seen = 0
-        for x0, _ in tqdm(loader, desc=f"{method_name} epoch {epoch}"):
+        for x0, _ in tqdm(
+            loader, desc=f"{method_name} epoch {epoch}", disable=not show
+        ):
             x0 = x0.to(device)
             loss = method.loss(x0)
             optim.zero_grad()
@@ -60,7 +63,7 @@ def run_training(
             running += loss.item() * x0.shape[0]
             n_seen += x0.shape[0]
         print(f"[{method_name}] epoch {epoch}: loss={running / n_seen:.4f}")
-        torch.save(method.net.state_dict(), ckpt_root / "model.pt")
+        torch.save(method.net.state_dict(), ckpt_root / f"model_{epochs}.pt")
 
 
 def parse_args() -> argparse.Namespace:
@@ -74,7 +77,13 @@ def parse_args() -> argparse.Namespace:
         "--grad-clip",
         type=float,
         default=None,
-        help="Max grad norm; recommended for score_continuous (see Task 8 notes).",
+        help="Max grad norm; recommended for score_continuous.",
+    )
+    parser.add_argument(
+        "--show",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Show training progress bar (default: enabled).",
     )
     return parser.parse_args()
 
@@ -92,6 +101,7 @@ def main() -> None:
         lr=args.lr,
         grad_clip=args.grad_clip,
         device=device,
+        show=args.show,
     )
 
 
