@@ -88,12 +88,19 @@ def parse_args() -> argparse.Namespace:
         default=True,
         help="Show training progress bar (default: enabled).",
     )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default=None,
+        help="e.g. 'cuda:0', 'cuda:1', 'cuda:2', or 'cpu'. "
+        "Default: cuda:0 if a GPU is available, else cpu.",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
     loader = get_mnist_loader(
         root=args.data_root, batch_size=args.batch_size, train=True
     )

@@ -255,12 +255,19 @@ def parse_args() -> argparse.Namespace:
         "writing metrics_epoch{N}.json + metrics_history.json. "
         "Mutually exclusive with --ckpt.",
     )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default=None,
+        help="e.g. 'cuda:0', 'cuda:1', 'cuda:2', or 'cpu'. "
+        "Default: cuda:0 if a GPU is available, else cpu.",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
 
     if args.all_epochs:
         if args.ckpt is not None:
