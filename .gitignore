@@ -219,3 +219,6 @@ __marimo__/
 
 #VSCode
 .vscode
+
+# Downloaded datasets
+/data/
