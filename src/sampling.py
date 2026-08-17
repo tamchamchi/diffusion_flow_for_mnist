@@ -29,7 +29,8 @@ def sample(
     device: torch.device | str = "cpu",
 ) -> torch.Tensor:
     """Integrate dx/dt = method.velocity(x, t) from t=1 (noise) to t=T_MIN
-    (data) with a fixed-step Euler solver, identical for all 5 methods."""
+    (data) with a fixed-step Euler solver, identical for all 5 methods.
+    Returns (num_samples, *shape) generated images in [-1, 1]."""
     method.eval()
     x1 = torch.randn(num_samples, *shape, device=device)
     t_grid = torch.linspace(1.0, T_MIN, num_steps, device=device)
@@ -54,8 +55,9 @@ def sample_adaptive(
 ) -> tuple[torch.Tensor, int]:
     """Integrate dx/dt = method.velocity(x, t) from t=1 (noise) to t=T_MIN
     (data) with an adaptive-step solver run to (rtol, atol), returning both
-    the generated batch and the number of function evaluations (NFE) the
-    solver needed to reach that tolerance."""
+    the generated batch -- (num_samples, *shape) images in [-1, 1] -- and
+    the number of function evaluations (NFE) the solver needed to reach
+    that tolerance."""
     method.eval()
     x1 = torch.randn(num_samples, *shape, device=device)
     t_grid = torch.tensor([1.0, T_MIN], device=device)
@@ -80,6 +82,9 @@ def generate_and_save(
     ckpt_path: str | None = None,
     device: torch.device | str = "cpu",
 ) -> None:
+    """Loads method_name's checkpoint (latest one on disk if ckpt_path is
+    None), draws num_samples images with the fixed-step sample() above,
+    and saves them as one num_samples/8-row grid PNG at out_path."""
     device = torch.device(device)
     method = METHODS[method_name]().to(device)
     if ckpt_path is None:

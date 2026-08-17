@@ -43,9 +43,10 @@ class Method(ABC):
 
     @abstractmethod
     def loss(self, x0: torch.Tensor) -> torch.Tensor:
-        """Training loss for one batch of clean data x0 in [-1, 1]."""
+        """x0: (B, 1, 28, 28) clean data in [-1, 1] -> scalar training loss."""
 
     @abstractmethod
     def velocity(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
-        """dx/dt for the probability-flow ODE at (x, t). src/sampling.py
-        integrates this from t=1 (noise) to t=T_MIN (data) for every method."""
+        """x: (B, 1, 28, 28), t: (B,) -> (B, 1, 28, 28) dx/dt for the
+        probability-flow ODE at (x, t). src/sampling.py integrates this
+        from t=1 (noise) to t=T_MIN (data) for every method."""

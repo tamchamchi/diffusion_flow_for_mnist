@@ -34,6 +34,10 @@ def load_reports(ckpt_root: Path, feature_extractor: str = "inception") -> list[
 
 
 def render_markdown_table(reports: list[dict]) -> str:
+    """One GFM table row per report, in the order load_reports produced
+    them (i.e. CKPT_DIRNAME's method order). A report missing nll_bpd/fid/
+    avg_nfe (no metrics file found for that method yet) renders as "—"
+    in that cell rather than crashing or being skipped."""
     lines = ["| Method | NLL (BPD) | FID | Avg. NFE |", "|---|---|---|---|"]
     for r in reports:
         nll = f"{r['nll_bpd']:.3f}" if r.get("nll_bpd") is not None else "—"

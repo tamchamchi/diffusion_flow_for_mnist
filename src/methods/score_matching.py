@@ -13,16 +13,24 @@ from src.schedules import VPPath, beta, expand_t
 
 
 class ScoreMatching(Method):
+    """SM: variance-preserving conditional path, network predicts the score
+    grad_x log p_t(x_t), weighted by sigma(t)^2 (Song & Ermon 2019)."""
+
     name = "score"
     path = VPPath
 
     def _weight(self, t: torch.Tensor) -> torch.Tensor:
+        """t: any shape -> matching-shape loss weight lambda(t); overridden
+        by ScoreFlow below to swap the weighting scheme."""
         return self.path.sigma(t) ** 2
 
     def loss(self, x0: torch.Tensor) -> torch.Tensor:
-        t = self.sample_time(x0.shape[0], x0.device)
-        te = expand_t(t, x0)
-        x1 = torch.randn_like(x0)
+        """x0: (B, 1, 28, 28) clean images -> scalar weighted MSE between
+        the network's score prediction and the closed-form conditional
+        score -x1/sigma(t) at a random t (denoising score matching)."""
+        t = self.sample_time(x0.shape[0], x0.device)  # (B,)
+        te = expand_t(t, x0)  # (B,1,1,1), broadcastable against x0
+        x1 = torch.randn_like(x0)  # (B, 1, 28, 28), the noise endpoint
         sigma = self.path.sigma(te)
         x_t = self.path.alpha(te) * x0 + sigma * x1
         target_score = -x1 / sigma
@@ -31,7 +39,8 @@ class ScoreMatching(Method):
         return torch.mean(weight * (score_pred - target_score) ** 2)
 
     def velocity(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
-        # Probability-flow ODE for the VP-SDE: dx/dt = -0.5*beta(t)*(x + score(x,t)).
+        """x: (B, 1, 28, 28), t: (B,) -> (B, 1, 28, 28) dx/dt.
+        Probability-flow ODE for the VP-SDE: dx/dt = -0.5*beta(t)*(x + score(x,t))."""
         te = expand_t(t, x)
         score_pred = self.net(x, t)
         b = beta(te)
@@ -46,4 +55,6 @@ class ScoreFlow(ScoreMatching):
     name = "score_continuous"
 
     def _weight(self, t: torch.Tensor) -> torch.Tensor:
+        """Likelihood-style weight beta(1-t), evaluated at the reversed
+        time index -- see the module docstring above."""
         return beta(1.0 - t)

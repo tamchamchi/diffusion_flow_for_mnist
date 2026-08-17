@@ -10,6 +10,7 @@ MNIST-focused papers instead extract features from a small classifier
 trained on MNIST itself). This module is that classifier.
 """
 
+import torch
 from torch import nn
 
 
@@ -48,11 +49,11 @@ class MNISTClassifierCNN(nn.Module):
             nn.Linear(feature_dim, num_classes),
         )
 
-    def extract_features(self, x):
+    def extract_features(self, x: torch.Tensor) -> torch.Tensor:
         """(N,1,28,28) -> (N, feature_dim) penultimate-layer embedding."""
         return self.embed(self.conv(x))
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """(N,1,28,28) -> (N, num_classes) logits."""
         return self.classifier(self.extract_features(x))
 

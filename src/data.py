@@ -18,6 +18,11 @@ def get_mnist_loader(
     download: bool = True,
     num_workers: int = 2,
 ) -> DataLoader:
+    """MNIST train or test split, batched and normalized to [-1, 1].
+    Yields (images, labels) pairs where images is (batch_size, 1, 28, 28);
+    labels are unused by every training/sampling method here (all 5 are
+    unconditional) but returned anyway since torchvision.datasets.MNIST
+    always pairs them."""
     dataset = datasets.MNIST(
         root=root, train=train, download=download, transform=_TRANSFORM
     )

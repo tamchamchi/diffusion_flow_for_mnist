@@ -35,6 +35,9 @@ def dequantize(x0: torch.Tensor) -> torch.Tensor:
 
 
 def log_prob_to_bpd(log_p: torch.Tensor, dim: int) -> torch.Tensor:
+    """log_p: (B,) nats, per-sample log-density from compute_log_prob ->
+    (B,) bits/dim, converting both the nats->bits base and the
+    continuous-density->discrete-pixel change of variables (BPD_CONSTANT)."""
     return -log_p / (dim * math.log(2)) + BPD_CONSTANT
 
 
@@ -45,17 +48,24 @@ def compute_log_prob(
     rtol: float = 1e-5,
     atol: float = 1e-5,
 ) -> torch.Tensor:
-    """log p_model(x0) in nats, per sample."""
+    """x0: (B, 1, 28, 28) -> (B,) log p_model(x0) in nats, per sample."""
+    # eps: (B, 1, 28, 28) Rademacher vector, fixed for the whole ODE solve
+    # (one Hutchinson trace estimator per sample, not resampled per step).
     eps = torch.randint(0, 2, x0.shape, device=x0.device, dtype=x0.dtype) * 2 - 1
 
     def augmented_ode(t: torch.Tensor, state: tuple[torch.Tensor, torch.Tensor]):
+        # state = (x, logdet), x: (B, 1, 28, 28), logdet: (B,) -> matching
+        # shapes (dx/dt, d(logdet)/dt) for torchdiffeq to integrate jointly.
         x, _ = state
         with torch.enable_grad():
             x_req = x.detach().requires_grad_(True)
             t_batch = t.expand(x_req.shape[0])
             v = method.velocity(x_req, t_batch)
+            # Vector-Jacobian product (v^T eps) w.r.t. x_req, cheaper than
+            # the full Jacobian: eps^T (dv/dx) eps is an unbiased estimator
+            # of tr(dv/dx), the instantaneous change-of-variables term.
             (vjp,) = torch.autograd.grad((v * eps).sum(), x_req)
-        trace = (vjp * eps).flatten(1).sum(dim=1)
+        trace = (vjp * eps).flatten(1).sum(dim=1)  # (B,)
         return v.detach(), trace
 
     logdet0 = torch.zeros(x0.shape[0], device=x0.device)

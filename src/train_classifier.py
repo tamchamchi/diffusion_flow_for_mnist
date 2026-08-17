@@ -31,6 +31,8 @@ CKPT_DIRNAME = "ckpt_classifier"
 def evaluate_accuracy(
     model: nn.Module, loader: DataLoader, device: torch.device | str
 ) -> float:
+    """Fraction of loader's (image, label) pairs model classifies
+    correctly (argmax over the 10-class logits)."""
     model.eval()
     correct, total = 0, 0
     for x, y in loader:

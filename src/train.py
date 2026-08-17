@@ -1,3 +1,10 @@
+"""Trains any one of the 5 generative methods (src/methods/*.py) on MNIST,
+checkpointing model_{epoch}.pt every epoch to $CKPT_ROOT/<method's ckpt
+dir> -- also the single source of truth for the METHODS registry and
+CKPT_DIRNAME layout every other script (evaluate_metrics.py, sampling.py,
+compare_methods.py) imports rather than re-deriving.
+"""
+
 import argparse
 import os
 from pathlib import Path
@@ -68,6 +75,12 @@ def run_training(
     show: bool = True,
     resume: bool = False,
 ) -> None:
+    """Trains method_name for `epochs` epochs on loader, saving a
+    model_{epoch}.pt checkpoint (network weights only, no optimizer state)
+    to $CKPT_ROOT/<method's ckpt dir> after every epoch. With resume=True,
+    continues from the latest checkpoint already on disk (if any) instead
+    of starting over at epoch 0 -- a no-op if start_epoch is already
+    >= epochs, so re-running a finished job is always safe."""
     device = torch.device(device)
     method = METHODS[method_name]().to(device)
     optim = torch.optim.Adam(method.parameters(), lr=lr)
@@ -105,7 +118,7 @@ def run_training(
         for x0, _ in tqdm(
             loader, desc=f"{method_name} epoch {epoch}", disable=not show
         ):
-            x0 = x0.to(device)
+            x0 = x0.to(device)  # (batch_size, 1, 28, 28); labels (_) unused -- unconditional
             loss = method.loss(x0)
             optim.zero_grad()
             loss.backward()
