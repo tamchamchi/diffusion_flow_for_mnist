@@ -172,3 +172,15 @@ test/                   # pytest suite
 ```bash
 pytest test/
 ```
+
+## References
+
+- Ho, J., Jain, A., & Abbeel, P. (2020). Denoising diffusion probabilistic models. *Advances in Neural Information Processing Systems*, 33, 6840–6851. [https://arxiv.org/abs/2006.11239](https://arxiv.org/abs/2006.11239)
+
+- Song, Y., Sohl-Dickstein, J., Kingma, D. P., Kumar, A., Ermon, S., & Poole, B. (2021). Score-based generative modeling through stochastic differential equations. *arXiv preprint arXiv:2011.13456*. [https://arxiv.org/abs/2011.13456](https://arxiv.org/abs/2011.13456)
+
+- Lipman, Y., Chen, R. T. Q., Ben-Hamu, H., Nickel, M., & Le, M. (2022). Flow matching for generative modeling. *arXiv preprint arXiv:2210.02747*. [https://arxiv.org/abs/2210.02747](https://arxiv.org/abs/2210.02747)
+
+- Luo, C. (2022). Understanding diffusion models: A unified perspective. *arXiv preprint arXiv:2208.11970*. [https://arxiv.org/abs/2208.11970](https://arxiv.org/abs/2208.11970)
+
+- Holderrieth, P., & Erives, E. (2025). An introduction to flow matching and diffusion models. *arXiv preprint arXiv:2506.02070*. [https://arxiv.org/abs/2506.02070](https://arxiv.org/abs/2506.02070)
