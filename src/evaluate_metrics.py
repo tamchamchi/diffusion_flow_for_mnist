@@ -23,6 +23,7 @@ from src.metrics.fid import (
     compute_or_load_real_statistics,
     fid_from_statistics,
     get_inception_feature_extractor,
+    get_mnist_cnn_feature_extractor,
 )
 from src.metrics.likelihood import compute_bpd
 from src.sampling import sample_adaptive
@@ -53,6 +54,34 @@ def find_all_checkpoints(ckpt_dir: Path) -> list[Path]:
     if not candidates:
         raise FileNotFoundError(f"no checkpoint found in {ckpt_dir}")
     return candidates
+
+
+def load_feature_extractor(
+    feature_extractor: str,
+    classifier_ckpt: str | Path | None,
+    device: torch.device | str,
+) -> tuple[nn.Module, Callable[[torch.Tensor], torch.Tensor], str]:
+    """Resolves --feature-extractor into (model, transform, stats_tag).
+    stats_tag namespaces the cached real-image statistics file (the two
+    extractors live in different feature spaces, so their statistics --
+    and any FID computed from them -- are not comparable or interchangeable)."""
+    if feature_extractor == "inception":
+        logger.info("Loading Inception-v3 feature extractor")
+        model, transform = get_inception_feature_extractor(device)
+        return model, transform, "inception"
+    if feature_extractor == "mnist_cnn":
+        ckpt = Path(classifier_ckpt) if classifier_ckpt is not None else (
+            Path(os.environ["CKPT_ROOT"]) / "ckpt_classifier" / "mnist_cnn.pt"
+        )
+        if not ckpt.exists():
+            raise FileNotFoundError(
+                f"no MNIST classifier checkpoint at {ckpt}; train one first "
+                "with `python -m src.train_classifier`, or pass --classifier-ckpt"
+            )
+        logger.info("Loading MNIST-CNN feature extractor")
+        model, transform = get_mnist_cnn_feature_extractor(ckpt, device)
+        return model, transform, "mnist_cnn"
+    raise ValueError(f"unknown --feature-extractor {feature_extractor!r}")
 
 
 def find_latest_checkpoint(ckpt_dir: Path) -> Path:
@@ -155,6 +184,8 @@ def evaluate_method(
     solver: str = "dopri5",
     batch_size: int = 500,
     device: torch.device | str = "cpu",
+    feature_extractor: str = "inception",
+    classifier_ckpt: str | Path | None = None,
 ) -> dict:
     """Evaluate one checkpoint (default: the latest one on disk for
     method_name) and write its report to <ckpt_dir>/metrics.json. For a
@@ -170,11 +201,11 @@ def evaluate_method(
     method = METHODS[method_name]().to(device)
     method.net.load_state_dict(torch.load(resolved_ckpt, map_location=device, weights_only=True))
 
-    logger.info("[%s] Loading Inception-v3 feature extractor", method_name)
-    extractor, transform = get_inception_feature_extractor(device)
+    extractor, transform, stats_tag = load_feature_extractor(feature_extractor, classifier_ckpt, device)
+    stats_filename = "real_activation_stats.npz" if stats_tag == "inception" else f"real_activation_stats_{stats_tag}.npz"
     real_mu, real_sigma = compute_or_load_real_statistics(
         get_mnist_loader(batch_size=batch_size, train=True, download=True),
-        cache_path=ckpt_root / "real_activation_stats.npz",
+        cache_path=ckpt_root / stats_filename,
         extractor=extractor,
         transform=transform,
         device=device,
@@ -199,6 +230,7 @@ def evaluate_method(
     )
     report["checkpoint"] = str(resolved_ckpt)
     report["epoch"] = _epoch_of(resolved_ckpt)
+    report["feature_extractor"] = stats_tag
 
     report_path = ckpt_dir / "metrics.json"
     report_path.write_text(json.dumps(report, indent=2))
@@ -216,6 +248,8 @@ def evaluate_epochs(
     solver: str = "dopri5",
     batch_size: int = 500,
     device: torch.device | str = "cpu",
+    feature_extractor: str = "inception",
+    classifier_ckpt: str | Path | None = None,
 ) -> list[dict]:
     """Evaluate model_*.pt checkpoints saved for method_name (one per
     training epoch — src/train.py:run_training saves a new one every
@@ -252,11 +286,11 @@ def evaluate_epochs(
     )
 
     method = METHODS[method_name]().to(device)
-    logger.info("[%s] Loading Inception-v3 feature extractor", method_name)
-    extractor, transform = get_inception_feature_extractor(device)
+    extractor, transform, stats_tag = load_feature_extractor(feature_extractor, classifier_ckpt, device)
+    stats_filename = "real_activation_stats.npz" if stats_tag == "inception" else f"real_activation_stats_{stats_tag}.npz"
     real_mu, real_sigma = compute_or_load_real_statistics(
         get_mnist_loader(batch_size=batch_size, train=True, download=True),
-        cache_path=ckpt_root / "real_activation_stats.npz",
+        cache_path=ckpt_root / stats_filename,
         extractor=extractor,
         transform=transform,
         device=device,
@@ -292,6 +326,7 @@ def evaluate_epochs(
         )
         report["checkpoint"] = str(ckpt)
         report["epoch"] = epoch
+        report["feature_extractor"] = stats_tag
         (ckpt_dir / f"metrics_epoch{epoch}.json").write_text(json.dumps(report, indent=2))
         history.append(report)
         logger.info(
@@ -350,6 +385,24 @@ def parse_args() -> argparse.Namespace:
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="Logging verbosity for progress tracking (default: INFO).",
     )
+    parser.add_argument(
+        "--feature-extractor",
+        type=str,
+        default="inception",
+        choices=["inception", "mnist_cnn"],
+        help="FID feature space. 'inception' (default) is the literature-"
+        "comparable ImageNet-pretrained Inception-v3. 'mnist_cnn' uses a "
+        "small CNN trained on MNIST itself (src/train_classifier.py), a "
+        "more domain-appropriate but not cross-paper-comparable option.",
+    )
+    parser.add_argument(
+        "--classifier-ckpt",
+        type=str,
+        default=None,
+        help="Checkpoint for --feature-extractor mnist_cnn. Default: "
+        "$CKPT_ROOT/ckpt_classifier/mnist_cnn.pt (src/train_classifier.py's "
+        "output). Ignored for --feature-extractor inception.",
+    )
     return parser.parse_args()
 
 
@@ -373,6 +426,8 @@ def main() -> None:
             solver=args.solver,
             batch_size=args.batch_size,
             device=device,
+            feature_extractor=args.feature_extractor,
+            classifier_ckpt=args.classifier_ckpt,
         )
         print(json.dumps(history, indent=2))
     else:
@@ -386,6 +441,8 @@ def main() -> None:
             solver=args.solver,
             batch_size=args.batch_size,
             device=device,
+            feature_extractor=args.feature_extractor,
+            classifier_ckpt=args.classifier_ckpt,
         )
         print(json.dumps(report, indent=2))
 

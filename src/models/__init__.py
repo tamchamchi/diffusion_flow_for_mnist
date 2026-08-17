@@ -1,6 +1,7 @@
+from .mnist_cnn import MNISTClassifierCNN, build_default_mnist_cnn
 from .unet import UNet
 
-__all__ = ["UNet"]
+__all__ = ["UNet", "MNISTClassifierCNN", "build_default_mnist_cnn"]
 
 
 def build_default_unet() -> UNet:

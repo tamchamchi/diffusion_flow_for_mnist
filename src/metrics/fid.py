@@ -1,8 +1,21 @@
 """Frechet Inception Distance (FID; Heusel et al. 2017) for MNIST samples.
 
-FID compares 2048-dim Inception-v3 pool features of real vs. generated
-images. MNIST is 28x28 grayscale, so every image is resized to Inception's
-expected 299x299 and channel-replicated to 3 channels before extraction.
+FID compares feature-space statistics of real vs. generated images. Two
+feature extractors are supported:
+
+- get_inception_feature_extractor: the standard, literature-comparable
+  choice -- 2048-dim ImageNet-pretrained Inception-v3 pool features. MNIST
+  is 28x28 grayscale, so every image is resized to Inception's expected
+  299x299 and channel-replicated to 3 channels before extraction.
+- get_mnist_cnn_feature_extractor: 128-dim features from a small CNN
+  trained on MNIST itself (src/train_classifier.py). Inception's features
+  were learned on natural RGB photos, a poor domain match for MNIST
+  digits, so this is the more MNIST-appropriate option; it just isn't
+  comparable to FID numbers reported elsewhere.
+
+Both extractors are returned as (model, transform) so every downstream
+function below (compute_activation_statistics, compute_or_load_real_statistics)
+works identically regardless of which one is used.
 """
 
 import logging
@@ -14,6 +27,8 @@ import scipy.linalg
 import torch
 from torch import nn
 from torchvision.models import Inception_V3_Weights, inception_v3
+
+from src.models import build_default_mnist_cnn
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +52,41 @@ def get_inception_feature_extractor(
         images = (images.clamp(-1, 1) + 1) / 2  # [-1,1] -> [0,1]
         images = images.repeat(1, 3, 1, 1)
         return preprocess(images)
+
+    return model, transform
+
+
+class _MNISTClassifierFeatureExtractor(nn.Module):
+    """Thin wrapper so model(x) yields the classifier's penultimate-layer
+    embedding directly, matching the (N, feature_dim)-out interface
+    compute_activation_statistics expects from any extractor."""
+
+    def __init__(self, classifier: nn.Module) -> None:
+        super().__init__()
+        self.classifier = classifier
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.classifier.extract_features(x)
+
+
+def get_mnist_cnn_feature_extractor(
+    ckpt_path: str | Path,
+    device: torch.device | str = "cpu",
+) -> tuple[nn.Module, Callable[[torch.Tensor], torch.Tensor]]:
+    """Returns (model, transform) where model(transform(images)) yields
+    (N, 128) features from the penultimate layer of the MNIST classifier
+    trained by src/train_classifier.py. Unlike Inception, no resize/channel
+    replication is needed -- the classifier already consumes (N,1,28,28)
+    images in the same [-1,1] range training uses."""
+    logger.info("Loading MNIST classifier weights from %s", ckpt_path)
+    classifier = build_default_mnist_cnn()
+    classifier.load_state_dict(torch.load(ckpt_path, map_location=device, weights_only=True))
+    model = _MNISTClassifierFeatureExtractor(classifier)
+    model.eval()
+    model.to(device)
+
+    def transform(images: torch.Tensor) -> torch.Tensor:
+        return images.clamp(-1, 1)
 
     return model, transform
 
