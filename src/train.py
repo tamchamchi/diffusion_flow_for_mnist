@@ -11,7 +11,12 @@ from src.data import get_mnist_loader
 from src.methods.base import Method
 from src.methods.flow_matching import FlowMatchingDiffusion, FlowMatchingOT
 from src.methods.noise_matching import NoiseMatchingDiffusion
-from src.methods.score_matching import ScoreFlow, ScoreMatching
+from src.methods.score_matching import (
+    ScoreBetaWeighted,
+    ScoreEDM,
+    ScoreFlow,
+    ScoreMatching,
+)
 
 load_dotenv()
 
@@ -21,6 +26,8 @@ METHODS: dict[str, type[Method]] = {
     "ddpm": NoiseMatchingDiffusion,
     "score": ScoreMatching,
     "score_flow": ScoreFlow,
+    "score_edm": ScoreEDM,
+    "score_beta_weighted": ScoreBetaWeighted,
 }
 
 # Matches the CKPT_ROOT sub-directories already named in .env.example.
@@ -30,6 +37,8 @@ CKPT_DIRNAME: dict[str, str] = {
     "ddpm": "ckpt_ddpm",
     "score": "ckpt_score",
     "score_flow": "ckpt_score_flow",
+    "score_edm": "ckpt_score_edm",
+    "score_beta_weighted": "ckpt_score_beta_weighted",
 }
 
 

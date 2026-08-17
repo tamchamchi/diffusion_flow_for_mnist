@@ -1,9 +1,11 @@
 """Score-based methods. The network predicts the score of the shared VP path
 directly: s_theta(x_t, t) ≈ -x1 / sigma(t) = grad_x log p_t(x_t | x0).
-ScoreMatching and ScoreFlow (Task 8) share everything except the loss weight
-lambda(t): ScoreMatching uses sigma(t)^2 (Song & Ermon 2019's weight that
-keeps the regression target O(1) instead of blowing up as sigma -> 0);
-ScoreFlow (Task 8) uses beta(1-t).
+ScoreMatching, ScoreFlow, ScoreEDM, and ScoreBetaWeighted share everything
+except the loss weight lambda(t): ScoreMatching uses sigma(t)^2 (Song &
+Ermon 2019's weight that keeps the regression target O(1) instead of
+blowing up as sigma -> 0); ScoreFlow (Task 8) uses beta(1-t);
+ScoreEDM uses 1/sigma(t)^2 (EDM-style inverse-variance weighting);
+ScoreBetaWeighted uses beta(t).
 """
 
 import torch
@@ -47,3 +49,25 @@ class ScoreFlow(ScoreMatching):
 
     def _weight(self, t: torch.Tensor) -> torch.Tensor:
         return beta(1.0 - t)
+
+
+class ScoreEDM(ScoreMatching):
+    """Identical loss/velocity code as ScoreMatching; only the loss weight
+    changes to 1/sigma(t)^2 (EDM-style inverse-variance weighting)."""
+
+    name = "score_edm"
+
+    def _weight(self, t: torch.Tensor) -> torch.Tensor:
+        sigma = self.path.sigma(t)
+        return 1.0 / (sigma**2 + 1e-8)
+
+
+class ScoreBetaWeighted(ScoreMatching):
+    """Identical loss/velocity code as ScoreMatching; only the loss weight
+    changes to beta(t) (unlike ScoreFlow's beta(1-t), evaluated directly at
+    t rather than the reversed time index)."""
+
+    name = "score_beta_weighted"
+
+    def _weight(self, t: torch.Tensor) -> torch.Tensor:
+        return beta(t)
