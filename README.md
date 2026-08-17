@@ -53,8 +53,13 @@ Each trained checkpoint is scored on three metrics
 - **NFE** — average number of function evaluations an adaptive-tolerance
   (`dopri5`) solver needs to draw one sample.
 
-`src/compare_methods.py` collects every method's `metrics.json` into one
-Markdown table.
+The two extractors live in different, non-comparable feature spaces, so
+every report filename is namespaced by extractor (`src/utils/metrics_paths.py`
+-- e.g. `metrics.json` vs. `metrics_mnist_cnn.json`, `inception` kept
+unsuffixed for backward compatibility). `src/compare_methods.py
+--feature-extractor {inception,mnist_cnn}` collects every method's report
+into one Markdown table, and `src/utils/plot_metrics.py` plots FID against
+training epoch from the same per-extractor history files.
 
 ## Getting started
 
@@ -85,27 +90,63 @@ python -m src.sampling --method ddpm --num-samples 64 --out samples_ddpm.png
 bash scripts/evaluate.sh ddpm --feature-extractor mnist_cnn
 
 # Evaluate and compare all 5 methods, then render comparison.md
-bash scripts/compare_all.sh
+bash scripts/compare_all.sh --feature-extractor mnist_cnn
+
+# Plot FID vs. epoch for all 5 methods, zoomed to a Y range you choose
+python -m src.utils.plot_metrics --feature-extractor mnist_cnn --ylim 50 200
 ```
 
 > [!TIP]
 > `--epochs 50 80 100` on `evaluate.sh` evaluates specific checkpoints and
-> writes a `metrics_history.json` you can plot FID/NLL against epoch with.
+> merges them into a `metrics_history.json` you can plot FID/NLL against
+> epoch with -- re-running with a different `--epochs` subset later adds
+> to that history instead of overwriting it.
 
 ## Results
 
-Example run (epoch 350, Inception-v3 FID, 2000 samples per metric — small
-by FID convention, so treat these as directional rather than final):
+Example run, epoch 350, 2000 samples per metric — small by FID convention
+(Heusel et al. 2017 use tens of thousands), so treat these as directional
+rather than final. The two tables are separate feature spaces (see
+[Evaluation](#evaluation)) and their FID columns are **not** comparable to
+each other.
 
-| Method | NLL (BPD) $\downarrow$| FID $\downarrow$| Avg. NFE $\downarrow$|
-|---|---|---|---|
+<div style="display: flex; gap: 30px;">
+
+<div style="flex: 1;">
+
+### MNIST-CNN
+
+| Method | NLL (BPD) ↓ | FID ↓ | Avg. NFE ↓ |
+|---|---:|---:|---:|
+| `ddpm` | 2.390 | 145.403 | 176.0 |
+| `score` | 1.869 | 136.238 | 150.5 |
+| `score_continuous` | 2.370 | 1248.002 | 180.5 |
+| `fm_diffusion` | 2.221 | 85.628 | 155.0 |
+| `fm_ot` | **1.607** | **68.515** | **114.5** |
+
+<img src="figs/fid_vs_epoch_cnn.png" width="80%">
+</div>
+
+<div style="flex: 1;">
+
+### InceptionV3
+
+| Method | NLL (BPD) ↓ | FID ↓ | Avg. NFE ↓ |
+|---|---:|---:|---:|
 | `ddpm` | 2.392 | 124.481 | 177.5 |
 | `score` | 1.868 | 129.055 | 150.5 |
 | `score_continuous` | 2.379 | 241.597 | 185.0 |
-| `fm_diffusion `| 2.221 | 123.583 | 153.5 |
+| `fm_diffusion` | 2.221 | 123.583 | 153.5 |
 | `fm_ot` | **1.606** | **120.598** | **116.0** |
 
-Regenerate this table with `bash scripts/compare_all.sh`.
+<img src="figs/fid_vs_epoch_inception.png" width="80%">
+
+</div>
+
+</div>
+
+Regenerate a table with `bash scripts/compare_all.sh --feature-extractor
+{inception,mnist_cnn}` and a chart with the `plot_metrics` command above.
 
 ## Project structure
 
@@ -114,6 +155,7 @@ src/
   methods/              # Method subclasses: fm_ot, fm_diffusion, ddpm, score, score_continuous
   models/               # Shared UNet + MNIST-CNN classifier
   metrics/              # FID and NLL/likelihood implementations
+  utils/                # metrics_paths.py (report filenames), plot_metrics.py (FID-vs-epoch chart)
   data.py               # MNIST data pipeline
   schedules.py          # alpha(t), sigma(t), beta(t) conditional-path definitions
   sampling.py           # Probability-flow-ODE sampler (fixed-step and adaptive)

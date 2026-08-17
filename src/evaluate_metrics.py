@@ -30,6 +30,12 @@ from src.sampling import sample_adaptive
 from src.train import CKPT_DIRNAME, METHODS, _epoch_of
 from src.train import find_all_checkpoints as _find_all_checkpoints_or_empty
 from src.train import find_latest_checkpoint as _find_latest_checkpoint_or_none
+from src.utils.metrics_paths import (
+    metrics_epoch_filename,
+    metrics_filename,
+    metrics_history_filename,
+    stats_filename,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -188,8 +194,11 @@ def evaluate_method(
     classifier_ckpt: str | Path | None = None,
 ) -> dict:
     """Evaluate one checkpoint (default: the latest one on disk for
-    method_name) and write its report to <ckpt_dir>/metrics.json. For a
-    full per-epoch history use evaluate_epochs() instead."""
+    method_name) and write its report to <ckpt_dir>/metrics.json (or
+    metrics_{feature_extractor}.json for any extractor besides the default
+    "inception" -- see src.utils.metrics_paths.metrics_filename -- so switching --feature-extractor
+    never overwrites another extractor's report for the same checkpoint).
+    For a full per-epoch history use evaluate_epochs() instead."""
     device = torch.device(device)
     ckpt_root = Path(os.environ["CKPT_ROOT"])
     ckpt_dir = ckpt_root / CKPT_DIRNAME[method_name]
@@ -202,10 +211,9 @@ def evaluate_method(
     method.net.load_state_dict(torch.load(resolved_ckpt, map_location=device, weights_only=True))
 
     extractor, transform, stats_tag = load_feature_extractor(feature_extractor, classifier_ckpt, device)
-    stats_filename = "real_activation_stats.npz" if stats_tag == "inception" else f"real_activation_stats_{stats_tag}.npz"
     real_mu, real_sigma = compute_or_load_real_statistics(
         get_mnist_loader(batch_size=batch_size, train=True, download=True),
-        cache_path=ckpt_root / stats_filename,
+        cache_path=ckpt_root / stats_filename(stats_tag),
         extractor=extractor,
         transform=transform,
         device=device,
@@ -232,7 +240,7 @@ def evaluate_method(
     report["epoch"] = _epoch_of(resolved_ckpt)
     report["feature_extractor"] = stats_tag
 
-    report_path = ckpt_dir / "metrics.json"
+    report_path = ckpt_dir / metrics_filename(stats_tag)
     report_path.write_text(json.dumps(report, indent=2))
     logger.info("[%s] Wrote report to %s", method_name, report_path)
     return report
@@ -259,10 +267,18 @@ def evaluate_epochs(
     (the default) evaluates every checkpoint found on disk. Raises
     FileNotFoundError if an explicitly requested epoch has no checkpoint.
 
-    Writes one metrics_epoch{N}.json per evaluated checkpoint plus a
-    combined metrics_history.json (list of reports, ordered by epoch); the
-    last entry is also written to metrics.json, same file evaluate_method()
-    writes, so src/compare_methods.py keeps reading the latest epoch."""
+    Writes one metrics_epoch{N}.json per evaluated checkpoint, merged into
+    a combined metrics_history.json (list of reports, ordered by epoch --
+    a call with a different --epochs subset merges into whatever history
+    already exists on disk instead of overwriting it); the last entry is
+    also written to metrics.json, same file evaluate_method() writes, so
+    src/compare_methods.py keeps reading the latest epoch.
+
+    feature_extractor picks which FID feature space to write ("inception"
+    or "mnist_cnn"): output filenames are namespaced by extractor (see
+    src/utils/metrics_paths.py), with "inception" kept unsuffixed for
+    backward compatibility, so re-running under a different extractor
+    never overwrites another extractor's reports for the same checkpoint."""
     device = torch.device(device)
     ckpt_root = Path(os.environ["CKPT_ROOT"])
     ckpt_dir = ckpt_root / CKPT_DIRNAME[method_name]
@@ -287,17 +303,24 @@ def evaluate_epochs(
 
     method = METHODS[method_name]().to(device)
     extractor, transform, stats_tag = load_feature_extractor(feature_extractor, classifier_ckpt, device)
-    stats_filename = "real_activation_stats.npz" if stats_tag == "inception" else f"real_activation_stats_{stats_tag}.npz"
     real_mu, real_sigma = compute_or_load_real_statistics(
         get_mnist_loader(batch_size=batch_size, train=True, download=True),
-        cache_path=ckpt_root / stats_filename,
+        cache_path=ckpt_root / stats_filename(stats_tag),
         extractor=extractor,
         transform=transform,
         device=device,
         num_samples=num_fid_samples,
     )
 
-    history = []
+    # Merge into whatever this extractor's history already has on disk,
+    # rather than overwriting it with only this call's checkpoints -- e.g.
+    # `--epochs 50 100` followed later by `--epochs 150 200` should leave
+    # all four epochs in metrics_history.json, not just the last two.
+    history_path = ckpt_dir / metrics_history_filename(stats_tag)
+    history_by_epoch: dict[int, dict] = {}
+    if history_path.exists():
+        history_by_epoch = {r["epoch"]: r for r in json.loads(history_path.read_text())}
+
     for i, ckpt in enumerate(checkpoints, start=1):
         epoch = _epoch_of(ckpt)
         logger.info(
@@ -327,19 +350,20 @@ def evaluate_epochs(
         report["checkpoint"] = str(ckpt)
         report["epoch"] = epoch
         report["feature_extractor"] = stats_tag
-        (ckpt_dir / f"metrics_epoch{epoch}.json").write_text(json.dumps(report, indent=2))
-        history.append(report)
+        (ckpt_dir / metrics_epoch_filename(stats_tag, epoch)).write_text(json.dumps(report, indent=2))
+        history_by_epoch[epoch] = report  # merge: only this epoch's old entry is replaced
         logger.info(
             "[%s] Checkpoint %d/%d (epoch %d) done: NLL=%.4f FID=%.4f avg_NFE=%.1f",
             method_name, i, len(checkpoints), epoch,
             report["nll_bpd"], report["fid"], report["avg_nfe"],
         )
 
-    (ckpt_dir / "metrics_history.json").write_text(json.dumps(history, indent=2))
-    (ckpt_dir / "metrics.json").write_text(json.dumps(history[-1], indent=2))
+    history = [history_by_epoch[e] for e in sorted(history_by_epoch)]
+    history_path.write_text(json.dumps(history, indent=2))
+    (ckpt_dir / metrics_filename(stats_tag)).write_text(json.dumps(history[-1], indent=2))
     logger.info(
-        "[%s] Done: wrote metrics_history.json with %d entries to %s",
-        method_name, len(history), ckpt_dir,
+        "[%s] Done: wrote %s with %d entries to %s",
+        method_name, history_path.name, len(history), ckpt_dir,
     )
     return history
 

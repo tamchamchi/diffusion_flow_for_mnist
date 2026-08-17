@@ -21,4 +21,14 @@ for m in fm_ot fm_diffusion ddpm score score_continuous; do
 done
 
 set -a; source .env; set +a
-python -m src.compare_methods --out comparison.md
+# Re-parses "$@" for just --feature-extractor so compare_methods.py reads
+# the same extractor's reports evaluate.sh above just wrote (it otherwise
+# defaults to "inception" and would silently compare against nothing).
+extra_args=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --feature-extractor) extra_args+=("$1" "$2"); shift 2 ;;
+    *) shift ;;
+  esac
+done
+python -m src.compare_methods --out comparison.md "${extra_args[@]}"
