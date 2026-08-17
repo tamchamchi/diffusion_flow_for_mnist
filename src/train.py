@@ -19,6 +19,7 @@ from src.methods.base import Method
 from src.methods.flow_matching import FlowMatchingDiffusion, FlowMatchingOT
 from src.methods.noise_matching import NoiseMatchingDiffusion
 from src.methods.score_matching import ScoreFlow, ScoreMatching
+from src.utils.seed import set_seed
 
 load_dotenv()
 
@@ -165,11 +166,20 @@ def parse_args() -> argparse.Namespace:
         "instead of starting over at epoch 0 (e.g. after a crash). "
         "No-op if no checkpoint exists yet.",
     )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed for weight init, DataLoader shuffling, and every "
+        "noise draw in the training loop (src/utils/seed.py). Same seed + "
+        "same args -> same run.",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    set_seed(args.seed)
     device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
     loader = get_mnist_loader(
         root=args.data_root, batch_size=args.batch_size, train=True

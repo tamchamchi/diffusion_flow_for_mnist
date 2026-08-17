@@ -36,6 +36,7 @@ from src.utils.metrics_paths import (
     metrics_history_filename,
     stats_filename,
 )
+from src.utils.seed import set_seed
 
 logger = logging.getLogger(__name__)
 
@@ -427,11 +428,20 @@ def parse_args() -> argparse.Namespace:
         "$CKPT_ROOT/ckpt_classifier/mnist_cnn.pt (src/train_classifier.py's "
         "output). Ignored for --feature-extractor inception.",
     )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed for the FID sampling noise, NLL dequantization, "
+        "and Hutchinson-trace eps draws (src/utils/seed.py). Same seed + "
+        "same checkpoint -> same NLL/FID/NFE numbers.",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    set_seed(args.seed)
     configure_logging(args.log_level)
     device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
     logger.info("Starting evaluation: method=%s device=%s", args.method, device)

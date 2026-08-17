@@ -15,6 +15,7 @@ from torchdiffeq import odeint
 from src.methods.base import Method
 from src.schedules import T_MIN
 from src.train import CKPT_DIRNAME, METHODS, find_latest_checkpoint
+from src.utils.seed import set_seed
 
 load_dotenv()
 
@@ -112,11 +113,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--out", type=str, default=None)
     parser.add_argument("--ckpt", type=str, default=None)
     parser.add_argument("--device", type=str, default="cpu")
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed for the x1 ~ N(0,I) noise draw (src/utils/seed.py). "
+        "Same seed + same checkpoint -> same generated samples.",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    set_seed(args.seed)
     out_path = Path(args.out or f"samples_{args.method}.png")
     generate_and_save(
         method_name=args.method,
