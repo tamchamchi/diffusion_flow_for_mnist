@@ -30,7 +30,7 @@ touches — so one integrator draws samples from all five identically.
 | `fm_diffusion` | Flow matching | Variance-preserving (VP) | velocity | uniform |
 | `ddpm` | Noise matching | VP | noise `ε` | uniform (Ho et al. 2020) |
 | `score` | Score matching | VP | score | `sigma(t)^2` (Song & Ermon 2019) |
-| `score_continuous` | Score matching | VP | score | `beta(1-t)` (likelihood-weighted) |
+| `score_flow` | Score matching | VP | score | `beta(1-t)` (likelihood-weighted) |
 
 > [!NOTE]
 > `src/methods/base.py` defines the shared `Method` interface; `src/schedules.py`
@@ -72,7 +72,7 @@ statistics, and metrics reports (one subdirectory per method — see
 ## Usage
 
 ```bash
-# Train one of: fm_ot, fm_diffusion, ddpm, score, score_continuous
+# Train one of: fm_ot, fm_diffusion, ddpm, score, score_flow
 bash scripts/train_ddpm.sh --epochs 100
 
 # Train the MNIST-CNN classifier used by --feature-extractor mnist_cnn
@@ -101,7 +101,7 @@ by FID convention, so treat these as directional rather than final):
 |---|---|---|---|
 | `ddpm` | 2.392 | 124.481 | 177.5 |
 | `score` | 1.868 | 129.055 | 150.5 |
-| `score_continuous` | 2.379 | 241.597 | 185.0 |
+| `score_flow` | 2.379 | 241.597 | 185.0 |
 | `fm_diffusion `| 2.221 | 123.583 | 153.5 |
 | `fm_ot` | **1.606** | **120.598** | **116.0** |
 
@@ -111,7 +111,7 @@ Regenerate this table with `bash scripts/compare_all.sh`.
 
 ```
 src/
-  methods/              # Method subclasses: fm_ot, fm_diffusion, ddpm, score, score_continuous
+  methods/              # Method subclasses: fm_ot, fm_diffusion, ddpm, score, score_flow
   models/               # Shared UNet + MNIST-CNN classifier
   metrics/              # FID and NLL/likelihood implementations
   data.py               # MNIST data pipeline

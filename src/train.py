@@ -20,7 +20,7 @@ METHODS: dict[str, type[Method]] = {
     "fm_diffusion": FlowMatchingDiffusion,
     "ddpm": NoiseMatchingDiffusion,
     "score": ScoreMatching,
-    "score_continuous": ScoreFlow,
+    "score_flow": ScoreFlow,
 }
 
 # Matches the CKPT_ROOT sub-directories already named in .env.example.
@@ -29,7 +29,7 @@ CKPT_DIRNAME: dict[str, str] = {
     "fm_diffusion": "ckpt_flow_diff",
     "ddpm": "ckpt_ddpm",
     "score": "ckpt_score",
-    "score_continuous": "ckpt_score_continuous",
+    "score_flow": "ckpt_score_flow",
 }
 
 
@@ -129,7 +129,7 @@ def parse_args() -> argparse.Namespace:
         "--grad-clip",
         type=float,
         default=None,
-        help="Max grad norm; recommended for score_continuous.",
+        help="Max grad norm; recommended for score_flow.",
     )
     parser.add_argument(
         "--show",

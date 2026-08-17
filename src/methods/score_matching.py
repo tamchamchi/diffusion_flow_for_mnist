@@ -43,7 +43,7 @@ class ScoreFlow(ScoreMatching):
     weight changes to beta(1-t) (a likelihood-style weight evaluated at the
     reversed time index — see the spec table in this plan's header)."""
 
-    name = "score_continuous"
+    name = "score_flow"
 
     def _weight(self, t: torch.Tensor) -> torch.Tensor:
         return beta(1.0 - t)
