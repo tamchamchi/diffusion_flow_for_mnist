@@ -14,7 +14,7 @@ from torchdiffeq import odeint
 
 from src.methods.base import Method
 from src.schedules import T_MIN
-from src.train import CKPT_DIRNAME, METHODS
+from src.train import CKPT_DIRNAME, METHODS, find_latest_checkpoint
 
 load_dotenv()
 
@@ -40,6 +40,7 @@ def sample(
 
     trajectory = odeint(ode_func, x1, t_grid, method=solver)
     return trajectory[-1]  # type: ignore
+
 
 @torch.no_grad()
 def sample_adaptive(
@@ -82,9 +83,8 @@ def generate_and_save(
     device = torch.device(device)
     method = METHODS[method_name]().to(device)
     if ckpt_path is None:
-        ckpt_path = (
-            Path(os.environ["CKPT_ROOT"]) / CKPT_DIRNAME[method_name] / "model.pt"
-        )  # type: ignore
+        ckpt_root = Path(os.environ["CKPT_ROOT"]) / CKPT_DIRNAME[method_name]  # type: ignore
+        ckpt_path = find_latest_checkpoint(ckpt_root)  # type: ignore
     else:
         ckpt_path = Path(ckpt_path)  # type: ignore
     method.net.load_state_dict(
