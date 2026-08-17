@@ -13,6 +13,10 @@ they can be trained and compared on equal footing.
 |---|---|---|---|---|
 | <img src="figs/fm_ot.png" alt="FM-OT" width="250"> | <img src="figs/fm_diffusion.png" alt="FM-Diffusion" width="250"> | <img src="figs/ddpm.png" alt="DDPM" width="250"> | <img src="figs/score.png" alt="Score-matching" width="250"> | <img src="figs/score_continuous.png" alt="Score-continuous" width="250"> |
 
+All 5 methods, same starting noise, epoch 0 through 350 (`src/utils/make_gif.py`):
+
+<img src="figs/training_progress.gif" alt="Training progress, all 5 methods, epoch 0 to 350" width="600">
+
 ## Overview
 
 All five methods share the same forward corruption recipe: a clean digit
@@ -94,6 +98,9 @@ bash scripts/compare_all.sh --feature-extractor mnist_cnn
 
 # Plot FID vs. epoch for all 5 methods, zoomed to a Y range you choose
 python -m src.utils.plot_metrics --feature-extractor mnist_cnn --ylim 50 200
+
+# Animate all 5 methods' samples across training (same noise every frame)
+bash scripts/make_gif.sh --out figs/training_progress.gif
 ```
 
 > [!TIP]
@@ -155,7 +162,7 @@ src/
   methods/              # Method subclasses: fm_ot, fm_diffusion, ddpm, score, score_continuous
   models/               # Shared UNet + MNIST-CNN classifier
   metrics/              # FID and NLL/likelihood implementations
-  utils/                # metrics_paths.py (report filenames), plot_metrics.py (FID-vs-epoch chart)
+  utils/                # metrics_paths.py (report filenames), plot_metrics.py (FID-vs-epoch chart), make_gif.py (training-progress GIF)
   data.py               # MNIST data pipeline
   schedules.py          # alpha(t), sigma(t), beta(t) conditional-path definitions
   sampling.py           # Probability-flow-ODE sampler (fixed-step and adaptive)
