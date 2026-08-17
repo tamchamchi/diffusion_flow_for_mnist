@@ -134,10 +134,7 @@ def plot_fid_vs_epoch(
     ax.set_ylabel(f"FID ({extractor_label})")
     ax.set_xticks(epochs)
     ax.set_ylim(*ylim)
-    ax.set_title(
-        f"FID vs. training epoch, {extractor_label} features "
-        f"(zoomed to [{ylim[0]}, {ylim[1]}])"
-    )
+    ax.set_title(f"FID vs. training epoch, {extractor_label} features ")
     ax.grid(True, color="#e1e0d9", linewidth=0.8, zorder=0)
     ax.set_axisbelow(True)
     for spine in ("top", "right"):
