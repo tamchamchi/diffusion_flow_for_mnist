@@ -9,9 +9,9 @@ they can be trained and compared on equal footing.
 ![PyTorch](https://img.shields.io/badge/PyTorch-torchvision-ee4c2c)
 ![License](https://img.shields.io/badge/license-Apache--2.0-green)
 
-| FM-OT samples | FM-Diffusion samples | DDPM samples | Score-matching samples |
-|---|---|---|---|
-| ![FM-OT samples](figs/fm_ot.png) | ![FM-Diffusion samples](figs/fm_diffusion.png) | ![DDPM samples](figs/ddpm.png) | ![Score-matching samples](figs/score.png) |
+| FM-OT samples | FM-Diffusion samples | DDPM samples | Score-matching samples | Score-continuous samples
+|---|---|---|---|---|
+| ![FM-OT samples](figs/fm_ot.png) | ![FM-Diffusion samples](figs/fm_diffusion.png) | ![DDPM samples](figs/ddpm.png) | ![Score-matching samples](figs/score.png) | ![Score-continuous samples](figs/score_continuous.png)|
 
 ## Overview
 
