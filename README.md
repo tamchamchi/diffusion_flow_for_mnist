@@ -2,16 +2,16 @@
 
 Five generative-modeling methods — two flow-matching variants, DDPM, and two
 score-matching variants — implemented on a shared UNet, a shared
-continuous-time convention, and a shared probability-flow-ODE sampler, so
+flow-time convention, and a shared probability-flow-ODE sampler, so
 they can be trained and compared on equal footing.
 
 ![Python](https://img.shields.io/badge/python-3.11-blue)
 ![PyTorch](https://img.shields.io/badge/PyTorch-torchvision-ee4c2c)
 ![License](https://img.shields.io/badge/license-Apache--2.0-green)
 
-| FM-OT samples | FM-Diffusion samples | DDPM samples | Score-matching samples | Score-continuous samples |
+| FM-OT samples | FM-Diffusion samples | DDPM samples | Score-matching samples | Score-flow samples |
 |---|---|---|---|---|
-| <img src="figs/fm_ot.png" alt="FM-OT" width="250"> | <img src="figs/fm_diffusion.png" alt="FM-Diffusion" width="250"> | <img src="figs/ddpm.png" alt="DDPM" width="250"> | <img src="figs/score.png" alt="Score-matching" width="250"> | <img src="figs/score_continuous.png" alt="Score-continuous" width="250"> |
+| <img src="figs/fm_ot.png" alt="FM-OT" width="250"> | <img src="figs/fm_diffusion.png" alt="FM-Diffusion" width="250"> | <img src="figs/ddpm.png" alt="DDPM" width="250"> | <img src="figs/score.png" alt="Score-matching" width="250"> | <img src="figs/score_flow.png" alt="Score-flow" width="250"> |
 
 All 5 methods, same starting noise, epoch 0 through 350 (`src/utils/make_gif.py`):
 
@@ -34,7 +34,7 @@ touches — so one integrator draws samples from all five identically.
 | `fm_diffusion` | Flow matching | Variance-preserving (VP) | velocity | uniform |
 | `ddpm` | Noise matching | VP | noise `ε` | uniform (Ho et al. 2020) |
 | `score` | Score matching | VP | score | `sigma(t)^2` (Song & Ermon 2019) |
-| `score_continuous` | Score matching | VP | score | `beta(1-t)` (likelihood-weighted) |
+| `score_flow` | Score matching | VP | score | `beta(t)` (likelihood-weighted) |
 
 > [!NOTE]
 > `src/methods/base.py` defines the shared `Method` interface; `src/schedules.py`
@@ -81,7 +81,7 @@ statistics, and metrics reports (one subdirectory per method — see
 ## Usage
 
 ```bash
-# Train one of: fm_ot, fm_diffusion, ddpm, score, score_continuous
+# Train one of: fm_ot, fm_diffusion, ddpm, score, score_flow
 bash scripts/train_ddpm.sh --epochs 100
 
 # Train the MNIST-CNN classifier used by --feature-extractor mnist_cnn
@@ -127,7 +127,7 @@ each other.
 |---|---:|---:|---:|
 | `ddpm` | 2.390 | 145.403 | 176.0 |
 | `score` | 1.869 | 136.238 | 150.5 |
-| `score_continuous` | 2.370 | 1248.002 | 180.5 |
+| `score_flow` | 2.370 | 1248.002 | 180.5 |
 | `fm_diffusion` | 2.221 | 85.628 | 155.0 |
 | `fm_ot` | **1.607** | **68.515** | **114.5** |
 
@@ -142,7 +142,7 @@ each other.
 |---|---:|---:|---:|
 | `ddpm` | 2.392 | 124.481 | 177.5 |
 | `score` | 1.868 | 129.055 | 150.5 |
-| `score_continuous` | 2.379 | 241.597 | 185.0 |
+| `score_flow` | 2.379 | 241.597 | 185.0 |
 | `fm_diffusion` | 2.221 | 123.583 | 153.5 |
 | `fm_ot` | **1.606** | **120.598** | **116.0** |
 
@@ -159,7 +159,7 @@ Regenerate a table with `bash scripts/compare_all.sh --feature-extractor
 
 ```
 src/
-  methods/              # Method subclasses: fm_ot, fm_diffusion, ddpm, score, score_continuous
+  methods/              # Method subclasses: fm_ot, fm_diffusion, ddpm, score, score_flow
   models/               # Shared UNet + MNIST-CNN classifier
   metrics/              # FID and NLL/likelihood implementations
   utils/                # metrics_paths.py (report filenames), plot_metrics.py (FID-vs-epoch chart), make_gif.py (training-progress GIF)
