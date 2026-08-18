@@ -49,12 +49,12 @@ class ScoreMatching(Method):
 
 class ScoreFlow(ScoreMatching):
     """SF: identical loss/velocity code as ScoreMatching; only the loss
-    weight changes to beta(1-t) (a likelihood-style weight evaluated at the
+    weight changes to beta(t) (a likelihood-style weight evaluated at the
     reversed time index — see the spec table in this plan's header)."""
 
-    name = "score_continuous"
+    name = "score_flow"
 
     def _weight(self, t: torch.Tensor) -> torch.Tensor:
-        """Likelihood-style weight beta(1-t), evaluated at the reversed
+        """Likelihood-style weight beta(t), evaluated at the reversed
         time index -- see the module docstring above."""
-        return beta(1.0 - t)
+        return beta(t)
