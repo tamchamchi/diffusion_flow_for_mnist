@@ -11,12 +11,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-for m in fm_ot fm_diffusion ddpm score score_continuous; do
+for m in fm_ot fm_diffusion ddpm score score_flow; do
   bash scripts/evaluate.sh "$m" \
     --device cuda:2 \
     --num-nll-samples 2000 \
     --num-fid-samples 2000 \
-    --epochs 50 100 150 200 250 350 \
+    --epochs 50 100 150 200 250 300 350 399 \
     "$@"
 done
 

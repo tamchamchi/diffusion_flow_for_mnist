@@ -26,16 +26,17 @@ load_dotenv()
 
 _LABELS: dict[str, str] = {
     "fm_ot": "FM-OT",
-    "fm_diffusion": "FM-Diffusion",
+    "fm_diffusion": "FM-Diff",
     "ddpm": "DDPM",
     "score": "Score",
-    "score_continuous": "Score (cont.)",
+    "score_flow": "Score-Flow",
 }
 
 _UPSCALE = 3  # 28px MNIST digits are too small to read at native size in a gif
 _ROW_LABEL_WIDTH = 110
 _TITLE_HEIGHT = 30
 _ROW_GAP = 4
+_FONT_SIZE = 20
 
 
 def _grid_for_checkpoint(
@@ -78,7 +79,10 @@ def _compose_frame(
         color=(255, 255, 255),
     )
     draw = ImageDraw.Draw(frame)
-    font = ImageFont.load_default()
+    font = ImageFont.truetype(
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        _FONT_SIZE,
+    )
     draw.text((8, 6), f"epoch {epoch}", fill=(0, 0, 0), font=font)
 
     y = _TITLE_HEIGHT

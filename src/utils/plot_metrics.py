@@ -23,7 +23,7 @@ _COLORS: dict[str, str] = {
     "fm_diffusion": "#eb6834",
     "ddpm": "#1baf7a",
     "score": "#eda100",
-    "score_continuous": "#e87ba4",
+    "score_flow": "#e87ba4",
 }
 # Marker shape doubles as a colorblind-safe secondary encoding for identity,
 # alongside the legend -- never color alone.
@@ -32,14 +32,14 @@ _MARKERS: dict[str, str] = {
     "fm_diffusion": "s",
     "ddpm": "^",
     "score": "D",
-    "score_continuous": "v",
+    "score_flow": "v",
 }
 _LABELS: dict[str, str] = {
     "fm_ot": "FM-OT",
     "fm_diffusion": "FM-Diffusion",
     "ddpm": "DDPM",
     "score": "Score",
-    "score_continuous": "Score (continuous)",
+    "score_flow": "Score Flow",
 }
 _EXTRACTOR_LABELS: dict[str, str] = {
     "inception": "Inception-v3",
