@@ -20,8 +20,8 @@ def test_fm_ot_loss_is_finite_scalar_with_grad():
            training can proceed.
     """
     method = FlowMatchingOT()
-    x0 = torch.randn(4, 1, 28, 28)
-    loss = method.loss(x0)
+    x1 = torch.randn(4, 1, 28, 28)
+    loss = method.loss(x1)
     assert loss.dim() == 0
     assert torch.isfinite(loss)
     loss.backward()

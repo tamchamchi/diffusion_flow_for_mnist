@@ -1,11 +1,11 @@
 """Shared interface for all 5 generative-modeling methods.
 
 Every method wraps the *same* UNet architecture (build_default_unet) and the
-same time convention (t in [T_MIN, 1], t=0 <-> data, t=1 <-> noise, see
-src/schedules.py). Subclasses differ only in (a) which conditional path they
-train on, (b) what the network head is trained to predict, and (c) how that
-head's raw output is converted into a probability-flow-ODE velocity, so that
-sampling (src/sampling.py) is identical across all five.
+same time convention (t in [T_MIN, 1 - T_MIN], t=0 <-> noise, t=1 <-> data,
+see src/schedules.py). Subclasses differ only in (a) which conditional path
+they train on, (b) what the network head is trained to predict, and (c) how
+that head's raw output is converted into a probability-flow-ODE velocity, so
+that sampling (src/sampling.py) is identical across all five.
 """
 from abc import ABC, abstractmethod
 
@@ -38,15 +38,19 @@ class Method(ABC):
         return self
 
     def sample_time(self, batch_size: int, device: torch.device) -> torch.Tensor:
-        """t ~ U(T_MIN, 1), shared across every method."""
-        return torch.rand(batch_size, device=device) * (1.0 - T_MIN) + T_MIN
+        """t ~ U(T_MIN, 1 - T_MIN), shared across every method. The upper
+        margin keeps t away from t=1 (data), where every VP-path quantity's
+        singularity lives (see src/schedules.py); the lower margin isn't
+        strictly needed (nothing blows up at t=0/noise) but keeps training
+        and sampling's t ranges identical."""
+        return torch.rand(batch_size, device=device) * (1.0 - 2 * T_MIN) + T_MIN
 
     @abstractmethod
-    def loss(self, x0: torch.Tensor) -> torch.Tensor:
-        """x0: (B, 1, 28, 28) clean data in [-1, 1] -> scalar training loss."""
+    def loss(self, x1: torch.Tensor) -> torch.Tensor:
+        """x1: (B, 1, 28, 28) clean data in [-1, 1] -> scalar training loss."""
 
     @abstractmethod
     def velocity(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
         """x: (B, 1, 28, 28), t: (B,) -> (B, 1, 28, 28) dx/dt for the
         probability-flow ODE at (x, t). src/sampling.py integrates this
-        from t=1 (noise) to t=T_MIN (data) for every method."""
+        from t=T_MIN (noise) to t=1-T_MIN (data) for every method."""

@@ -1,8 +1,9 @@
 """NLL / bits-per-dimension via the instantaneous change-of-variables
 formula for continuous normalizing flows (Grathwohl et al. 2018,
 "FFJORD"), integrated along the shared probability-flow ODE
-(Method.velocity, src/methods/base.py) from t=T_MIN (data) to t=1 (noise),
-using a Hutchinson trace estimator for the divergence.
+(Method.velocity, src/methods/base.py) from t=1-T_MIN (data) to t=T_MIN
+(noise) -- i.e. run backward relative to sampling, data to noise -- using a
+Hutchinson trace estimator for the divergence.
 """
 
 import math
@@ -27,11 +28,11 @@ def standard_normal_log_prob(x: torch.Tensor) -> torch.Tensor:
     return -0.5 * (flat**2).sum(dim=1) - 0.5 * dim * math.log(2 * math.pi)
 
 
-def dequantize(x0: torch.Tensor) -> torch.Tensor:
+def dequantize(x1: torch.Tensor) -> torch.Tensor:
     """Uniform dequantization directly in x-space (standard variational
     bound for evaluating a continuous density model on discrete pixels;
     Theis et al. 2016)."""
-    return x0 + torch.rand_like(x0) * PIXEL_SCALE
+    return x1 + torch.rand_like(x1) * PIXEL_SCALE
 
 
 def log_prob_to_bpd(log_p: torch.Tensor, dim: int) -> torch.Tensor:
@@ -43,15 +44,17 @@ def log_prob_to_bpd(log_p: torch.Tensor, dim: int) -> torch.Tensor:
 
 def compute_log_prob(
     method: Method,
-    x0: torch.Tensor,
+    x1: torch.Tensor,
     solver: str = "dopri5",
     rtol: float = 1e-5,
     atol: float = 1e-5,
 ) -> torch.Tensor:
-    """x0: (B, 1, 28, 28) -> (B,) log p_model(x0) in nats, per sample."""
+    """x1: (B, 1, 28, 28) clean data -> (B,) log p_model(x1) in nats, per
+    sample. Runs the ODE backward, data (t=1-T_MIN) to noise (t=T_MIN), the
+    reverse of src/sampling.py's generation direction."""
     # eps: (B, 1, 28, 28) Rademacher vector, fixed for the whole ODE solve
     # (one Hutchinson trace estimator per sample, not resampled per step).
-    eps = torch.randint(0, 2, x0.shape, device=x0.device, dtype=x0.dtype) * 2 - 1
+    eps = torch.randint(0, 2, x1.shape, device=x1.device, dtype=x1.dtype) * 2 - 1
 
     def augmented_ode(t: torch.Tensor, state: tuple[torch.Tensor, torch.Tensor]):
         # state = (x, logdet), x: (B, 1, 28, 28), logdet: (B,) -> matching
@@ -68,18 +71,24 @@ def compute_log_prob(
         trace = (vjp * eps).flatten(1).sum(dim=1)  # (B,)
         return v.detach(), trace
 
-    logdet0 = torch.zeros(x0.shape[0], device=x0.device)
-    t_grid = torch.tensor([T_MIN, 1.0], device=x0.device)
-    x1, logdet = odeint(
-        augmented_ode, (x0, logdet0), t_grid, method=solver, rtol=rtol, atol=atol
+    logdet0 = torch.zeros(x1.shape[0], device=x1.device)
+    # Decreasing t_grid: start at the given data point (t=1-T_MIN) and
+    # integrate backward to the noise endpoint (t=T_MIN). torchdiffeq
+    # handles the negative step direction automatically; logdet_final ends
+    # up equal to -integral_{T_MIN}^{1-T_MIN} div(v) dt, exactly the term
+    # the change-of-variables formula needs to go from log p(noise) to
+    # log p(data) -- see the module docstring.
+    t_grid = torch.tensor([1.0 - T_MIN, T_MIN], device=x1.device)
+    x_traj, logdet = odeint(
+        augmented_ode, (x1, logdet0), t_grid, method=solver, rtol=rtol, atol=atol
     )
-    x1_final, logdet_final = x1[-1], logdet[-1]
-    return standard_normal_log_prob(x1_final) + logdet_final
+    x0_final, logdet_final = x_traj[-1], logdet[-1]
+    return standard_normal_log_prob(x0_final) + logdet_final
 
 
 def compute_bpd(
     method: Method,
-    x0: torch.Tensor,
+    x1: torch.Tensor,
     num_mc_samples: int = 1,
     solver: str = "dopri5",
     rtol: float = 1e-5,
@@ -87,10 +96,10 @@ def compute_bpd(
 ) -> torch.Tensor:
     """Per-sample bits/dim, averaged over num_mc_samples independent
     dequantization + Hutchinson-trace noise draws."""
-    dim = x0[0].numel()
+    dim = x1[0].numel()
     estimates = []
     for _ in range(num_mc_samples):
-        x_deq = dequantize(x0)
+        x_deq = dequantize(x1)
         log_p = compute_log_prob(method, x_deq, solver=solver, rtol=rtol, atol=atol)
         estimates.append(log_prob_to_bpd(log_p, dim))
     return torch.stack(estimates).mean(dim=0)

@@ -126,13 +126,13 @@ def run_evaluation(
     )
     bpd_values = []
     n_seen = 0
-    for x0, _ in test_loader:
+    for x1, _ in test_loader:
         if n_seen >= num_nll_samples:
             break
-        x0 = x0.to(device)
-        batch_bpd = compute_bpd(method, x0, solver=solver, rtol=rtol, atol=atol)
+        x1 = x1.to(device)
+        batch_bpd = compute_bpd(method, x1, solver=solver, rtol=rtol, atol=atol)
         bpd_values.append(batch_bpd)
-        n_seen += x0.shape[0]
+        n_seen += x1.shape[0]
         running_mean = torch.cat(bpd_values).mean().item()
         logger.info(
             "[%s] NLL progress: %d/%d samples, running mean BPD=%.4f",

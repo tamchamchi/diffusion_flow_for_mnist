@@ -116,18 +116,18 @@ def run_training(
         method.train()
         running = 0.0
         n_seen = 0
-        for x0, _ in tqdm(
+        for x1, _ in tqdm(
             loader, desc=f"{method_name} epoch {epoch}", disable=not show
         ):
-            x0 = x0.to(device)  # (batch_size, 1, 28, 28); labels (_) unused -- unconditional
-            loss = method.loss(x0)
+            x1 = x1.to(device)  # (batch_size, 1, 28, 28); labels (_) unused -- unconditional
+            loss = method.loss(x1)
             optim.zero_grad()
             loss.backward()
             if grad_clip is not None:
                 torch.nn.utils.clip_grad_norm_(method.parameters(), grad_clip)
             optim.step()
-            running += loss.item() * x0.shape[0]
-            n_seen += x0.shape[0]
+            running += loss.item() * x1.shape[0]
+            n_seen += x1.shape[0]
         print(f"[{method_name}] epoch {epoch}: loss={running / n_seen:.4f}")
         torch.save(method.net.state_dict(), ckpt_root / f"model_{epoch}.pt")
 

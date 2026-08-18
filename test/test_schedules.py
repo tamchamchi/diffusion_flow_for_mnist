@@ -41,8 +41,10 @@ def test_vp_path_derivatives_match_autograd():
 
 
 def test_beta_is_linear():
+    """beta(t) decreases in this module's t=0-noise/t=1-data convention:
+    BETA_MAX at t=0, BETA_MIN at t=1 (see src/schedules.py's docstring)."""
     t = torch.tensor([0.0, 0.5, 1.0])
-    expected = 0.1 + t * (20.0 - 0.1)
+    expected = 20.0 - t * (20.0 - 0.1)
     assert torch.allclose(beta(t), expected)
 
 

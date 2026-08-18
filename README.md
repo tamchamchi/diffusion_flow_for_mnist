@@ -19,21 +19,24 @@ All 5 methods, same starting noise, epoch 0 through 350 (`src/utils/make_gif.py`
 
 ## Overview
 
-All five methods share the same forward corruption recipe: a clean digit
-`x0` and Gaussian noise `x1 ~ N(0, I)` are mixed along a conditional path
-`x_t = alpha(t) * x0 + sigma(t) * x1` for `t` in `[T_MIN, 1]`. What differs
-per method is (a) which path — linear/OT or variance-preserving (VP) — (b)
-what the network head regresses (velocity, noise, or score), and (c) the
-loss weighting. Every method exposes a `velocity(x, t)` method (the
-probability-flow-ODE drift `dx/dt`), which is the only thing the sampler
-touches — so one integrator draws samples from all five identically.
+All five methods share the same forward corruption recipe: Gaussian noise
+`x0 ~ N(0, I)` and a clean digit `x1` are mixed along a conditional path
+`x_t = alpha(t) * x0 + sigma(t) * x1` for `t` in `[T_MIN, 1 - T_MIN]`, with
+`t=0` noise and `t=1` data (so sampling integrates `t` forward, `0 -> 1`,
+noise -> data — the original Flow Matching / rectified-flow convention).
+What differs per method is (a) which path — linear/OT or
+variance-preserving (VP) — (b) what the network head regresses (velocity,
+noise, or score), and (c) the loss weighting. Every method exposes a
+`velocity(x, t)` method (the probability-flow-ODE drift `dx/dt`), which is
+the only thing the sampler touches — so one integrator draws samples from
+all five identically.
 
 | Method | Family | Conditional path | Network predicts | Loss weight |
 |---|---|---|---|---|
 | `fm_ot` | Flow matching | Linear / optimal transport | velocity | uniform |
 | `fm_diffusion` | Flow matching | Variance-preserving (VP) | velocity | uniform |
 | `ddpm` | Noise matching | VP | noise `ε` | uniform (Ho et al. 2020) |
-| `score` | Score matching | VP | score | `sigma(t)^2` (Song & Ermon 2019) |
+| `score` | Score matching | VP | score | `alpha(t)^2` (Song & Ermon 2019) |
 | `score_flow` | Score matching | VP | score | `beta(t)` (likelihood-weighted) |
 
 > [!NOTE]

@@ -17,13 +17,13 @@ class FlowMatchingOT(Method):
     name = "fm_ot"
     path = OTPath
 
-    def loss(self, x0: torch.Tensor) -> torch.Tensor:
-        """x0: (B, 1, 28, 28) clean images -> scalar MSE between the
+    def loss(self, x1: torch.Tensor) -> torch.Tensor:
+        """x1: (B, 1, 28, 28) clean images -> scalar MSE between the
         network's velocity prediction and the closed-form conditional
         velocity at a random t."""
-        t = self.sample_time(x0.shape[0], x0.device)  # (B,)
-        te = expand_t(t, x0)  # (B,1,1,1), broadcastable against x0
-        x1 = torch.randn_like(x0)  # (B, 1, 28, 28), the noise endpoint
+        t = self.sample_time(x1.shape[0], x1.device)  # (B,)
+        te = expand_t(t, x1)  # (B,1,1,1), broadcastable against x1
+        x0 = torch.randn_like(x1)  # (B, 1, 28, 28), the noise endpoint
         x_t = self.path.alpha(te) * x0 + self.path.sigma(te) * x1
         target = self.path.alpha_dot(te) * x0 + self.path.sigma_dot(te) * x1
         v_pred = self.net(x_t, t)
