@@ -131,7 +131,7 @@ each other.
 | `fm_diffusion` | 2.221 | 85.628 | 155.0 |
 | `fm_ot` | **1.607** | **68.515** | **114.5** |
 
-<img src="figs/fid_vs_epoch_cnn.png" width="80%">
+<img src="figs/fid_vs_epoch_minist_cnn.png" width="80%">
 </div>
 
 <div style="flex: 1;">
