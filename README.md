@@ -132,7 +132,7 @@ each other.
 | `fm_ot `| **1.660** | 96.205 | **122.0** |
 
 
-<img src="figs/fid_vs_epoch_minist_cnn.png" width="80%">
+<img src="figs/fid_vs_epoch_mnist_cnn.png" width="80%">
 </div>
 
 <div style="flex: 1;">
