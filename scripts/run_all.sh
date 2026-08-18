@@ -12,8 +12,8 @@
 # python -m src.sampling --method score --out ./figs/score.png
 # python -m src.sampling --method score_flow --out ./figs/score_flow.png
 
-scripts/compare_all.sh --feature-extractor inception --batch-size 512 --device cuda:0
-scripts/compare_all.sh --feature-extractor mnist_cnn --batch-size 512 --device cuda:0
+# scripts/compare_all.sh --feature-extractor inception --batch-size 512 --device cuda:0
+# scripts/compare_all.sh --feature-extractor mnist_cnn --batch-size 512 --device cuda:0
 
-python -m src.utils.plot_metrics --epochs 50 100 150 200 250 300 350 --feature-extractor inception --out figs/fid_vs_epoch_inception.png --ylim 100 200
-python -m src.utils.plot_metrics --epochs 50 100 150 200 250 300 350 --feature-extractor mnist_cnn --out figs/fid_vs_epoch_minist_cnn.png --ylim 60 180
+python -m src.utils.plot_metrics --epochs 50 100 150 200 250 300 350 399 --feature-extractor inception --out figs/fid_vs_epoch_inception.png --ylim 110 200
+python -m src.utils.plot_metrics --epochs 50 100 150 200 250 300 350 399 --feature-extractor mnist_cnn --out figs/fid_vs_epoch_minist_cnn.png --ylim 80 180
